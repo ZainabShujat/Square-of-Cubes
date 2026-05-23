@@ -1,166 +1,274 @@
-import pygame
 import sys
+import ctypes
+import pygame
 
-from settings import *
-from colors import *
+from utils.constants import *
 
-from board import Board
-from logic import *
-from inventory import tile_inventory
+from core.board import Board
+from core.state import GameState
+from core.analysis import AnalysisEngine
 
-import ui
+from rendering.board_renderer import BoardRenderer
+from rendering.inventory_renderer import InventoryRenderer
+from rendering.ui_renderer import UIRenderer
+
+try:
+    from pygame._sdl2.video import Window
+except ImportError:
+    Window = None
+
+
+# =====================================================
+# INIT
+# =====================================================
 
 pygame.init()
 
 screen = pygame.display.set_mode(
-    (WIDTH, HEIGHT),
+    (WINDOW_WIDTH, WINDOW_HEIGHT),
     pygame.RESIZABLE
 )
-current_width = WIDTH
-current_height = HEIGHT
 
-pygame.display.set_caption(
-    "Square of Cubes"
-)
+pygame.display.set_caption(TITLE)
 
 clock = pygame.time.Clock()
 
+
+# =====================================================
+# SYSTEMS
+# =====================================================
+
 board = Board()
 
-dragging = False
-dragged_size = None
+state = GameState()
+
+analysis = AnalysisEngine(board)
+
+board_renderer = BoardRenderer()
+
+inventory_renderer = InventoryRenderer()
+
+ui_renderer = UIRenderer()
 
 
-def get_drag_anchor(mouse_x, mouse_y, size):
-    return (
-        (mouse_x - OFFSET_X - (size * CELL_SIZE // 2)) // CELL_SIZE,
-        (mouse_y - OFFSET_Y - (size * CELL_SIZE // 2)) // CELL_SIZE,
-    )
+# =====================================================
+# MAIN LOOP
+# =====================================================
 
 running = True
 
 while running:
 
+    screen_width = screen.get_width()
+    screen_height = screen.get_height()
+
     mouse_x, mouse_y = pygame.mouse.get_pos()
+
+    # =================================================
+    # EVENTS
+    # =================================================
 
     for event in pygame.event.get():
 
+        # -------------------------------------------------
         # QUIT
+        # -------------------------------------------------
+
         if event.type == pygame.QUIT:
+
             pygame.quit()
             sys.exit()
 
-        # -------------------------
-        # START DRAGGING
-        # -------------------------
+        # -------------------------------------------------
+        # WINDOW RESIZE
+        # -------------------------------------------------
 
-        if event.type == pygame.MOUSEBUTTONDOWN:
+        elif event.type == pygame.VIDEORESIZE:
+
+            new_width = max(event.w, MIN_WINDOW_WIDTH)
+            new_height = max(event.h, MIN_WINDOW_HEIGHT)
+
+            screen = pygame.display.set_mode(
+                (new_width, new_height),
+                pygame.RESIZABLE
+            )
+
+            window_style_applied = False
+
+        # -------------------------------------------------
+        # MOUSE DOWN
+        # -------------------------------------------------
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
 
             if event.button == 1:
 
-                for size, rect in ui.inventory_boxes.items():
+                # =========================================
+                # INVENTORY CLICK
+                # =========================================
 
-                    if rect.collidepoint(mouse_x, mouse_y):
-
-                        if tile_inventory[size] > 0:
-
-                            dragging = True
-                            dragged_size = size
-
-        # -------------------------
-        # DROP TILE
-        # -------------------------
-
-        if event.type == pygame.MOUSEBUTTONUP:
-
-            if event.button == 1:
-
-                if dragging:
-
-                    grid_x, grid_y = get_drag_anchor(
+                clicked_inventory = (
+                    inventory_renderer.handle_click(
+                        state,
                         mouse_x,
                         mouse_y,
-                        dragged_size
+                        screen_width,
+                        screen_height
+                    )
+                )
+
+                # =========================================
+                # PICK EXISTING TILE
+                # =========================================
+
+                if not clicked_inventory:
+
+                    grid_x, grid_y = (
+                        board_renderer.screen_to_grid(
+                            screen,
+                            mouse_x,
+                            mouse_y,
+                            screen_width,
+                            screen_height
+                        )
                     )
 
-                    if (
-                        0 <= grid_x < GRID_SIZE and
-                        0 <= grid_y < GRID_SIZE
-                    ):
+                    piece = state.get_piece_at(
+                        grid_x,
+                        grid_y
+                    )
 
-                        if can_place(
-                            board.grid,
-                            dragged_size,
-                            grid_y,
-                            grid_x
-                        ):
+                    if piece:
 
-                            place_tile(
-                                board.grid,
-                                dragged_size,
-                                grid_y,
-                                grid_x
-                            )
+                        state.remove_piece(piece)
 
-                            tile_inventory[dragged_size] -= 1
+                        state.return_tile(
+                            piece.size
+                        )
 
-                    dragging = False
-                    dragged_size = None
+                        state.dragging_piece = piece
 
-    # -------------------------
+                        state.selected_size = (
+                            piece.size
+                        )
+
+        # -------------------------------------------------
+        # MOUSE UP
+        # -------------------------------------------------
+
+        elif event.type == pygame.MOUSEBUTTONUP:
+
+            if event.button == 1:
+
+                if state.dragging_piece:
+
+                    piece = state.dragging_piece
+
+                    grid_x, grid_y = (
+                        board_renderer.screen_to_grid(
+                            screen,
+                            mouse_x,
+                            mouse_y,
+                            screen_width,
+                            screen_height
+                        )
+                    )
+
+                    valid = board.can_place(
+                        state,
+                        piece.size,
+                        grid_x,
+                        grid_y
+                    )
+
+                    if valid:
+
+                        piece.grid_x = grid_x
+                        piece.grid_y = grid_y
+
+                        state.add_piece(piece)
+
+                        state.take_tile(piece.size)
+
+                    state.dragging_piece = None
+
+        # -------------------------------------------------
+        # MOUSE MOVE
+        # -------------------------------------------------
+
+        elif event.type == pygame.MOUSEMOTION:
+
+            if state.dragging_piece:
+
+                grid_x, grid_y = (
+                    board_renderer.screen_to_grid(
+                        screen,
+                        mouse_x,
+                        mouse_y,
+                        screen_width,
+                        screen_height
+                    )
+                )
+
+                state.preview_x = grid_x
+                state.preview_y = grid_y
+
+                state.preview_valid = (
+                    board.can_place(
+                        state,
+                        state.dragging_piece.size,
+                        grid_x,
+                        grid_y
+                    )
+                )
+
+    # =====================================================
+    # ANALYSIS
+    # =====================================================
+
+    analysis.update(state)
+
+    # =====================================================
     # DRAW
-    # -------------------------
+    # =====================================================
 
-    screen.fill(BACKGROUND)
+    screen.fill(BACKGROUND_COLOR)
 
-    board.draw(screen)
+    # -----------------------------------------------------
+    # BOARD
+    # -----------------------------------------------------
 
-    # -------------------------
-    # PREVIEW
-    # -------------------------
-
-    if dragging:
-
-        grid_x, grid_y = get_drag_anchor(mouse_x, mouse_y, dragged_size)
-
-        valid = can_place(
-            board.grid,
-            dragged_size,
-            grid_y,
-            grid_x
-        )
-
-        board.draw_preview(
-            screen,
-            dragged_size,
-            grid_y,
-            grid_x,
-            valid
-        )
-
-        board.draw_dragging_tile(
-            screen,
-            dragged_size,
-            mouse_x,
-            mouse_y
-        )
-
-    # -------------------------
-    # UI
-    # -------------------------
-
-    font = pygame.font.SysFont(
-        "arial",
-        28
+    board_renderer.draw(
+        screen,
+        state,
+        board,
+        mouse_x,
+        mouse_y,
+        screen_width,
+        screen_height
     )
 
-    ui.draw_inventory(
+    # -----------------------------------------------------
+    # INVENTORY
+    # -----------------------------------------------------
+
+    inventory_renderer.draw(
         screen,
-        font,
-        tile_inventory,
-        dragged_size
+        state,
+        screen_width,
+        screen_height
+    )
+
+    # -----------------------------------------------------
+    # UI
+    # -----------------------------------------------------
+
+    ui_renderer.draw(
+        screen,
+        state,
+        screen_width,
+        screen_height
     )
 
     pygame.display.flip()
-
     clock.tick(FPS)
