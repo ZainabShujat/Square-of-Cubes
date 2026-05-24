@@ -1,3 +1,5 @@
+import audio
+
 import pygame
 
 from utils.constants import *
@@ -245,6 +247,7 @@ class InventoryRenderer:
             if rect.collidepoint(mouse_x, mouse_y):
                 if state.remaining_tiles[size] > 0:
                     state.selected_size = size
+                    audio.tile_pickup.play()
                     state.dragging_piece = Piece(size)
                     return True
 

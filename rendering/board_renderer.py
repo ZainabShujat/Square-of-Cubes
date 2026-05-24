@@ -1,3 +1,5 @@
+import math
+
 import pygame
 
 from utils.constants import *
@@ -102,7 +104,10 @@ class BoardRenderer:
         piece,
         offset_x,
         offset_y,
-        alpha=255
+        alpha=255,
+        scale=1.0,
+        shake_x=0,
+        shake_y=0
     ):
 
         color = piece.color
@@ -123,19 +128,23 @@ class BoardRenderer:
 
             for col in range(piece.size):
 
+                cell_size = max(1, int(self.cell_size * scale))
+
                 x = (
                     offset_x
-                    + col * self.cell_size
+                    + col * cell_size
                     + 2
+                    + shake_x
                 )
 
                 y = (
                     offset_y
-                    + row * self.cell_size
+                    + row * cell_size
                     + 2
+                    + shake_y
                 )
 
-                size = self.cell_size - 4
+                size = max(1, cell_size - 4)
 
                 # outer glow
                 glow_surface = pygame.Surface(
@@ -184,6 +193,87 @@ class BoardRenderer:
                     ),
                     border_radius=4
                 )
+
+    def draw_place_sparkles(
+        self,
+        screen,
+        piece,
+        offset_x,
+        offset_y,
+        progress
+    ):
+
+        tile_pixel_size = piece.size * self.cell_size
+        center_x = offset_x + tile_pixel_size // 2
+        center_y = offset_y + tile_pixel_size // 2
+        half_size = tile_pixel_size // 2
+
+        sparkle_count = min(12, 4 + piece.size)
+        base_radius = max(
+            5,
+            int(tile_pixel_size * (0.12 + piece.size * 0.03))
+        )
+
+        for index in range(sparkle_count):
+
+            edge_index = index % 4
+            edge_progress = (index / sparkle_count + progress * 0.85) % 1.0
+
+            if edge_index == 0:
+                sparkle_x = offset_x + int(edge_progress * tile_pixel_size)
+                sparkle_y = offset_y - 2
+            elif edge_index == 1:
+                sparkle_x = offset_x + tile_pixel_size + 2
+                sparkle_y = offset_y + int(edge_progress * tile_pixel_size)
+            elif edge_index == 2:
+                sparkle_x = offset_x + int((1.0 - edge_progress) * tile_pixel_size)
+                sparkle_y = offset_y + tile_pixel_size + 2
+            else:
+                sparkle_x = offset_x - 2
+                sparkle_y = offset_y + int((1.0 - edge_progress) * tile_pixel_size)
+
+            pull = int(base_radius * (0.2 + 0.8 * progress))
+
+            if sparkle_x < center_x:
+                sparkle_x -= pull
+            elif sparkle_x > center_x:
+                sparkle_x += pull
+
+            if sparkle_y < center_y:
+                sparkle_y -= pull
+            elif sparkle_y > center_y:
+                sparkle_y += pull
+
+            sparkle_size = max(2, int(5 * (1.0 - progress * 0.7)))
+
+            sparkle_color = (
+                min(255, 220 + index * 5),
+                min(255, 235 + index * 3),
+                140
+            )
+
+            pygame.draw.circle(
+                screen,
+                sparkle_color,
+                (sparkle_x, sparkle_y),
+                sparkle_size
+            )
+
+            pygame.draw.line(
+                screen,
+                (255, 255, 255),
+                (sparkle_x - sparkle_size * 2, sparkle_y),
+                (sparkle_x + sparkle_size * 2, sparkle_y),
+                1
+            )
+
+            pygame.draw.line(
+                screen,
+                (255, 255, 255),
+                (sparkle_x, sparkle_y - sparkle_size * 2),
+                (sparkle_x, sparkle_y + sparkle_size * 2),
+                1
+            )
 
     # =====================================================
     # DRAW BOARD
@@ -264,6 +354,63 @@ class BoardRenderer:
                     rect
                 )
 
+        current_time = pygame.time.get_ticks()
+        state.clear_finished_tile_animations(current_time)
+
+        # placement / invalid-drop animations
+        for animation in state.tile_animations:
+
+            start_time = animation.get("start_time", current_time)
+            duration = max(1, animation.get("duration", 1))
+            elapsed = current_time - start_time
+            progress = max(0.0, min(1.0, elapsed / duration))
+
+            if animation["type"] == "place":
+
+                piece = animation["piece"]
+                grid_x = animation["grid_x"]
+                grid_y = animation["grid_y"]
+                pulse = 0.92 + 0.08 * (1.0 - abs(1.0 - progress * 2.0))
+
+                px = board_rect.x + grid_x * self.cell_size
+                py = board_rect.y + grid_y * self.cell_size
+
+                self.draw_piece(
+                    screen,
+                    piece,
+                    px,
+                    py,
+                    scale=pulse
+                )
+
+                self.draw_place_sparkles(
+                    screen,
+                    piece,
+                    px,
+                    py,
+                    progress
+                )
+
+            elif animation["type"] == "invalid":
+
+                piece = animation["piece"]
+                grid_x = animation["grid_x"]
+                grid_y = animation["grid_y"]
+                shake_x = int(5 * math.sin(progress * 24.0))
+                shake_y = int(2 * math.sin(progress * 48.0))
+
+                px = board_rect.x + grid_x * self.cell_size
+                py = board_rect.y + grid_y * self.cell_size
+
+                self.draw_piece(
+                    screen,
+                    piece,
+                    px,
+                    py,
+                    shake_x=shake_x,
+                    shake_y=shake_y
+                )
+
         # placed pieces
         for piece in state.placed_pieces:
 
@@ -286,6 +433,7 @@ class BoardRenderer:
 
         # dragging preview
         if state.dragging_piece:
+            
 
             piece = state.dragging_piece
 

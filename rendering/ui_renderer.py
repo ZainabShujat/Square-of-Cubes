@@ -110,7 +110,7 @@ class UIRenderer:
         )
 
         title = self.title_font.render(
-            "Square of Cubes",
+            "Sum of Cubes",
             True,
             TEXT_COLOR
         )

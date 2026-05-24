@@ -10,7 +10,7 @@ MIN_WINDOW_HEIGHT = 450
 
 FPS = 60
 
-TITLE = "Square of Cubes"
+TITLE = "Sum of Cubes"
 
 # =========================
 # LAYOUT
@@ -114,3 +114,22 @@ PIECE_COLORS = [
     (255, 208, 240),   # pearl blush
 
 ]
+
+# =========================
+# MENU
+# =========================
+
+BUTTON_WIDTH = 260
+BUTTON_HEIGHT = 64
+
+BUTTON_RADIUS = 16
+
+BUTTON_BG = (32, 32, 68)
+BUTTON_HOVER = (48, 48, 92)
+
+BUTTON_TEXT = (240, 240, 255)
+
+TOPBAR_HEIGHT = 72
+
+SMALL_BUTTON_WIDTH = 120
+SMALL_BUTTON_HEIGHT = 42

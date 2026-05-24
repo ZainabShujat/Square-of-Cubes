@@ -6,6 +6,7 @@ class GameState:
 
     def __init__(self):
         self.solvable = True
+        self.confirm_dialog = None
 
         # =========================
         # board pieces
@@ -49,6 +50,15 @@ class GameState:
         self.score = 0
 
         self.analysis_dirty = True
+
+        # =========================
+        # animations
+        # =========================
+
+        self.tile_animations = []
+
+        
+        
 
     # =====================================================
     # INVENTORY
@@ -101,3 +111,29 @@ class GameState:
                 return piece
 
         return None
+
+    # =====================================================
+    # ANIMATIONS
+    # =====================================================
+
+    def add_tile_animation(self, animation_type, **data):
+
+        self.tile_animations.append({
+            "type": animation_type,
+            **data
+        })
+
+    def clear_finished_tile_animations(self, current_time):
+
+        active_animations = []
+
+        for animation in self.tile_animations:
+
+            start_time = animation.get("start_time", current_time)
+            duration = animation.get("duration", 0)
+
+            if current_time - start_time < duration:
+                active_animations.append(animation)
+
+        self.tile_animations = active_animations
+    
