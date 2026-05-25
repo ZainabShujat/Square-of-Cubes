@@ -554,6 +554,11 @@ def build_confirm_dialog_buttons():
     if state.confirm_dialog == "game_over":
         yes_text = "MODE MENU"
         no_text = "RESTART"
+        # center the two-button layout for game over as well
+        total_width = yes_width + no_width + gap
+        start_x = box_x + (520 - total_width) // 2
+        yes_x = start_x
+        no_x = yes_x + yes_width + gap
     elif state.confirm_dialog == "win":
         yes_text = "STAY"
         no_text = "MODE MENU"
