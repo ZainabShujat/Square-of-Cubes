@@ -32,6 +32,10 @@ class Board:
 
         return (x, y) in self.get_occupied_cells(state)
 
+    def is_full(self, state):
+
+        return len(self.get_occupied_cells(state)) >= self.size * self.size
+
     # =====================================================
     # PLACEMENT VALIDATION
     # =====================================================

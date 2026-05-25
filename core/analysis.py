@@ -1,4 +1,9 @@
-from utils.constants import BOARD_SIZE
+import pygame
+
+from core.fitmap import FitMap
+from core.deadzones import DeadzoneDetector
+from core.placements import PlacementGenerator
+from core.mobility import MobilityAnalyzer
 
 
 class AnalysisEngine:
@@ -6,6 +11,26 @@ class AnalysisEngine:
     def __init__(self, board):
 
         self.board = board
+
+        # ============================================
+        # topology systems
+        # ============================================
+
+        self.fitmap = FitMap(board)
+
+        self.deadzone_detector = DeadzoneDetector(
+            board,
+            self.fitmap
+        )
+
+        self.placement_generator = PlacementGenerator(
+            board,
+            self.fitmap
+        )
+
+        self.mobility_analyzer = MobilityAnalyzer(
+            self.placement_generator
+        )
 
     # =====================================================
     # REGION COUNT
@@ -39,8 +64,32 @@ class AnalysisEngine:
 
     def dead_region_count(self, state):
 
-        return len(
-            self.board.get_dead_regions(state)
+        dead_regions = self.deadzone_detector.find_dead_regions(
+            state
+        )
+
+        return len(dead_regions)
+
+    # =====================================================
+    # DEAD CELL COUNT
+    # =====================================================
+
+    def dead_cell_count(self, state):
+
+        dead_cells = self.deadzone_detector.find_dead_cells(
+            state
+        )
+
+        return len(dead_cells)
+
+    # =====================================================
+    # TOTAL FUTURE MOVES
+    # =====================================================
+
+    def total_future_moves(self, state):
+
+        return self.placement_generator.total_moves(
+            state
         )
 
     # =====================================================
@@ -76,72 +125,56 @@ class AnalysisEngine:
         return score
 
     # =====================================================
-    # SOLVABILITY HEURISTIC
+    # SOLVABILITY SCORE
     # =====================================================
 
     def solvability_score(self, state):
 
         score = 1000
 
-        regions = self.board.get_regions(state)
+        dead_cells = self.dead_cell_count(state)
 
-        remaining_areas = []
+        dead_regions = self.dead_region_count(state)
 
-        for size, count in state.remaining_tiles.items():
+        fragmentation = self.fragmentation_score(state)
 
-            remaining_areas.extend(
-                [size * size] * count
-            )
+        mobility = self.mobility_analyzer.mobility_score(
+            state
+        )
 
-        dead_regions = 0
-        fragmentation = 0
+        # ============================================
+        # penalties
+        # ============================================
 
-        for region in regions:
+        score -= dead_cells * 2
 
-            region_size = len(region)
-
-            # -------------------------
-            # dead regions
-            # -------------------------
-
-            possible = False
-
-            for area in remaining_areas:
-
-                if region_size % area == 0:
-
-                    possible = True
-                    break
-
-            if not possible:
-
-                dead_regions += 1
-
-            # -------------------------
-            # fragmentation
-            # -------------------------
-
-            if region_size <= 4:
-                fragmentation += 120
-
-            elif region_size <= 9:
-                fragmentation += 80
-
-            elif region_size <= 16:
-                fragmentation += 40
-
-            else:
-                fragmentation += 5
-
-        score -= dead_regions * 250
+        score -= dead_regions * 150
 
         score -= fragmentation
 
-        # -------------------------
-        # too many regions
-        # -------------------------
+        # ============================================
+        # reward mobility
+        # ============================================
 
-        score -= max(0, len(regions) - 1) * 50
+        score += mobility
+
+        return max(score, 0)
+
+        # ============================================
+        # penalties
+        # ============================================
+
+        score -= dead_cells * 2
+
+        score -= dead_regions * 150
+
+        score -= fragmentation
+
+        # ============================================
+        # reward flexibility
+        # ============================================
+
+        score += future_moves // 25
 
         return max(score, 0)
 
@@ -150,56 +183,74 @@ class AnalysisEngine:
     # =====================================================
 
     def update(self, state):
+
         if not state.analysis_dirty:
             return
 
-        regions = self.board.get_regions(state)
+        # ============================================
+        # topology
+        # ============================================
 
-        remaining_areas = []
+        dead_regions = self.deadzone_detector.find_dead_regions(
+            state
+        )
 
-        for size, count in state.remaining_tiles.items():
+        deadzone_count = len(dead_regions)
+        previous_deadzone_count = getattr(
+            state,
+            "deadzone_count",
+            0
+        )
 
-            remaining_areas.extend(
-                [size * size] * count
-            )
+        limit = (
+            state.game_mode.deadzone_limit
+        )
 
-        dead_regions = []
-        fragmentation = 0
+        score = self.solvability_score(state)
 
-        for region in regions:
+        mobility_data = self.mobility_analyzer.analyze(
+            state
+        )
 
-            region_size = len(region)
 
-            possible = False
+        # ============================================
+        # END STATE CHECKS
+        # ============================================
 
-            for area in remaining_areas:
+        if self.board.is_full(state):
 
-                if region_size % area == 0:
+            state.game_won = True
+            state.game_over = False
 
-                    possible = True
-                    break
+        elif limit is not None and deadzone_count >= limit:
 
-            if not possible:
+            state.game_over = True
+            state.game_won = False
 
-                dead_regions.append(region)
-
-            if region_size <= 4:
-                fragmentation += 120
-
-            elif region_size <= 9:
-                fragmentation += 80
-
-            elif region_size <= 16:
-                fragmentation += 40
-
-            else:
-                fragmentation += 5
-
-        score = 1000
-        score -= len(dead_regions) * 250
-        score -= fragmentation
-        score -= max(0, len(regions) - 1) * 50
+        # ============================================
+        # update state
+        # ============================================
 
         state.dead_regions = dead_regions
-        state.score = max(score, 0)
+
+        state.score = score
+
+        state.mobility_data = mobility_data
+
         state.analysis_dirty = False
+
+        state.previous_deadzone_count = previous_deadzone_count
+        state.deadzone_count = deadzone_count
+
+        if deadzone_count > previous_deadzone_count:
+
+            state.alert_message = (
+                "New dead zone formed."
+            )
+            state.alert_message_time = pygame.time.get_ticks()
+            state.alert_kind = "deadzone"
+
+
+       
+
+            

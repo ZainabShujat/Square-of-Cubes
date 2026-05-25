@@ -1,6 +1,7 @@
 class ScreenManager:
 
     MENU = "menu"
+    MODE_SELECT = "mode_select"
     GAME = "game"
     ABOUT = "about"
     TUTORIAL = "tutorial"
@@ -16,6 +17,10 @@ class ScreenManager:
     def is_menu(self):
 
         return self.current_screen == self.MENU
+
+    def is_mode_select(self):
+
+        return self.current_screen == self.MODE_SELECT
 
     def is_game(self):
 

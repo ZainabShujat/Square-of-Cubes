@@ -290,6 +290,11 @@ class BoardRenderer:
         screen_height
     ):
 
+        theme = getattr(state.game_mode, "theme", {})
+        play_area_color = theme.get("board_fill", (10, 10, 30))
+        board_color = theme.get("panel_fill", (18, 18, 45))
+        grid_color = theme.get("accent_soft", GRID_LINE_COLOR)
+
         board_rect = self.get_board_rect(
             screen_width,
             screen_height
@@ -304,14 +309,14 @@ class BoardRenderer:
 
         pygame.draw.rect(
             screen,
-            (10, 10, 30),
+            play_area_color,
             play_area_rect,
             border_radius=18
         )
 
         pygame.draw.rect(
             screen,
-            (18, 18, 45),
+            board_color,
             board_rect,
             border_radius=16
         )
@@ -329,7 +334,7 @@ class BoardRenderer:
 
                 pygame.draw.rect(
                     screen,
-                    GRID_LINE_COLOR,
+                    grid_color,
                     rect,
                     1
                 )

@@ -28,23 +28,23 @@ class InventoryRenderer:
         screen
     ):
 
-        rect = pygame.Rect(
-            OUTER_PADDING,
-            screen.get_height() - INVENTORY_HEIGHT,
-            screen.get_width() - SIDEBAR_WIDTH - OUTER_PADDING,
-            INVENTORY_HEIGHT
+        theme = getattr(self, "_theme", {})
+
+        rect = self.get_inventory_rect(
+            screen.get_width(),
+            screen.get_height()
         )
 
         pygame.draw.rect(
             screen,
-            INVENTORY_BG,
+            theme.get("inventory_fill", INVENTORY_BG),
             rect,
             border_radius=14
         )
 
         pygame.draw.rect(
             screen,
-            (18, 18, 44),
+            theme.get("panel_border", (18, 18, 44)),
             rect,
             width=2,
             border_radius=14
@@ -62,6 +62,15 @@ class InventoryRenderer:
                 rect.y
             ),
             3
+        )
+
+    def get_inventory_rect(self, screen_width, screen_height):
+
+        return pygame.Rect(
+            OUTER_PADDING,
+            screen_height - INVENTORY_HEIGHT,
+            screen_width - SIDEBAR_WIDTH - OUTER_PADDING,
+            INVENTORY_HEIGHT
         )
 
     # =====================================================
@@ -90,17 +99,24 @@ class InventoryRenderer:
             - OUTER_PADDING * 2
         )
 
+        inventory_rect = self.get_inventory_rect(
+            screen_width,
+            screen_height
+        )
+
+        available_height = inventory_rect.height - OUTER_PADDING
+
         gap = 20
         padding = 24
         preview_cell = 8
 
-        while preview_cell > 4:
+        while preview_cell > 3:
             total_width = 0
 
             for size in available_sizes:
                 preview_size = size * preview_cell
                 box_size = max(
-                    58,
+                    52,
                     preview_size + padding
                 )
                 total_width += box_size
@@ -115,34 +131,72 @@ class InventoryRenderer:
         self.preview_cell = preview_cell
 
         box_sizes = {}
-        total_width = 0
 
         for size in available_sizes:
             preview_size = size * self.preview_cell
             box_size = max(
-                58,
+                52,
                 preview_size + padding
             )
             box_sizes[size] = box_size
-            total_width += box_size
 
-        total_width += max(0, len(available_sizes) - 1) * gap
-
-        start_x = OUTER_PADDING + max(0, (available_width - total_width) // 2)
-        current_x = start_x
+        rows = []
+        current_row = []
+        current_width = 0
 
         for size in available_sizes:
             box_size = box_sizes[size]
+            needed_width = box_size if not current_row else current_width + gap + box_size
 
-            rect = pygame.Rect(
-                current_x,
-                screen_height - INVENTORY_HEIGHT + OUTER_PADDING // 2,
-                box_size,
-                box_size
-            )
+            if current_row and needed_width > available_width:
+                rows.append(current_row)
+                current_row = [size]
+                current_width = box_size
+            else:
+                current_row.append(size)
+                current_width = box_size if len(current_row) == 1 else needed_width
 
-            self.tile_boxes[size] = rect
-            current_x += box_size + gap
+        if current_row:
+            rows.append(current_row)
+
+        row_count = max(1, len(rows))
+        max_box_height = max(box_sizes.values(), default=52)
+        total_height = row_count * max_box_height + max(0, row_count - 1) * 12
+
+        while total_height > available_height and self.preview_cell > 3:
+            self.preview_cell -= 1
+            box_sizes = {}
+            max_box_height = 0
+
+            for size in available_sizes:
+                preview_size = size * self.preview_cell
+                box_size = max(52, preview_size + padding)
+                box_sizes[size] = box_size
+                max_box_height = max(max_box_height, box_size)
+
+            total_height = row_count * max_box_height + max(0, row_count - 1) * 10
+
+        row_gap = 10
+        top_y = inventory_rect.y + max(8, (inventory_rect.height - total_height) // 2)
+
+        for row_index, row in enumerate(rows):
+
+            row_width = sum(box_sizes[size] for size in row) + max(0, len(row) - 1) * gap
+            current_x = OUTER_PADDING + max(0, (available_width - row_width) // 2)
+            row_y = top_y + row_index * (max_box_height + row_gap)
+
+            for size in row:
+                box_size = box_sizes[size]
+
+                rect = pygame.Rect(
+                    current_x,
+                    row_y,
+                    box_size,
+                    box_size
+                )
+
+                self.tile_boxes[size] = rect
+                current_x += box_size + gap
 
     # =====================================================
     # TILE BOX
@@ -264,6 +318,8 @@ class InventoryRenderer:
         screen_width,
         screen_height
     ):
+
+        self._theme = getattr(state.game_mode, "theme", {})
 
         self.draw_background(screen)
         self.compute_positions(screen, state, screen_width, screen_height)

@@ -9,6 +9,8 @@ from utils.resource_path import resource_path
 from core.board import Board
 from core.state import GameState
 from core.analysis import AnalysisEngine
+from core.advisor import Advisor
+from core.game_modes import GAME_MODES
 
 from core.history import HistoryManager
 
@@ -42,6 +44,8 @@ solved_board_bg = pygame.image.load(
 ).convert_alpha()
 pygame.display.set_caption(TITLE)
 
+audio.game_start.play()
+
 clock = pygame.time.Clock()
 
 menu_font = pygame.font.SysFont(
@@ -70,6 +74,8 @@ state = GameState()
 
 analysis = AnalysisEngine(board)
 
+advisor = Advisor()
+
 board_renderer = BoardRenderer()
 
 inventory_renderer = InventoryRenderer()
@@ -92,6 +98,111 @@ def reset_game():
     state = GameState()
 
 
+def clear_end_dialog_state():
+
+    state.confirm_dialog = None
+    state.game_won = False
+    state.win_sound_played = False
+    state.game_over = False
+    state.game_over_sound_played = False
+
+
+def start_game(mode):
+
+    reset_game()
+    history.undo_stack.clear()
+    state.game_mode = mode
+    screen_manager.set_screen(ScreenManager.GAME)
+
+
+def begin_mode_transition(mode):
+
+    state.mode_transition_active = True
+    state.mode_transition_phase = "out"
+    state.mode_transition_alpha = 0
+    state.mode_transition_target = ScreenManager.GAME
+    state.mode_transition_next_mode = mode
+
+
+def build_mode_select_buttons():
+
+    global mode_buttons
+    global mode_back_button
+
+    mode_buttons = []
+
+    center_x = screen.get_width() // 2
+    card_width = 560
+    card_height = 132
+    start_y = 198
+    gap = 14
+
+    mode_order = [
+        GAME_MODES["STANDARD"],
+        GAME_MODES["ENDLESS"],
+        GAME_MODES["HARDCORE"],
+    ]
+
+    for index, mode in enumerate(mode_order):
+
+        y = start_y + index * (card_height + gap)
+
+        theme = getattr(mode, "theme", {})
+
+        bg_color = theme.get("panel_fill", (20, 20, 54))
+        hover_bg_color = theme.get("banner_fill", (36, 36, 84))
+        border_color = theme.get("panel_border", (110, 120, 210))
+        hover_border_color = theme.get("accent", (140, 150, 255))
+        title_color = theme.get("accent", TEXT_COLOR)
+        glow_color = theme.get("accent", None) if mode.name == "ENDLESS" else None
+        glow_alpha = 72 if mode.name == "ENDLESS" else 0
+
+        hover_sound = audio.gamemode_hover
+
+        if mode.name == "STANDARD":
+            click_sound = audio.standard_click
+        elif mode.name == "ENDLESS":
+            click_sound = audio.endless_click
+        else:
+            click_sound = audio.hardmode_click
+
+        mode_buttons.append(
+            Button(
+                f"{mode.name} MODE",
+                center_x - card_width // 2,
+                y,
+                card_width,
+                card_height,
+                callback=lambda selected_mode=mode: begin_mode_transition(selected_mode),
+                font_size=20,
+                hover_scale=1.015,
+                bg_color=bg_color,
+                hover_bg_color=hover_bg_color,
+                border_color=border_color,
+                hover_border_color=hover_border_color,
+                text_color=title_color,
+                text_offset_y=-22,
+                pulse_amount=0.007,
+                pulse_period=3600,
+                glow_color=glow_color,
+                glow_alpha=glow_alpha,
+                hover_sound=hover_sound,
+                click_sound=click_sound
+            )
+        )
+
+    mode_back_button = Button(
+        "BACK",
+        80,
+        screen.get_height() - 100,
+        140,
+        50,
+        callback=lambda: screen_manager.set_screen(
+            ScreenManager.MENU
+        )
+    )
+
+
 # =====================================================
 # MENU BUTTONS
 # =====================================================
@@ -109,6 +220,10 @@ about_back_button = None
 
 tutorial_index = 0
 
+tutorial_menu_button = None
+
+tutorial_prev_button = None
+
 tutorial_next_button = None
 
 tutorial_back_button = None
@@ -116,6 +231,12 @@ tutorial_back_button = None
 yes_button = None
 
 no_button = None
+
+extra_confirm_button = None
+
+mode_buttons = []
+
+mode_back_button = None
 
 # =====================================================
 # BUILD MENU BUTTONS
@@ -142,7 +263,7 @@ def build_menu_buttons():
             BUTTON_HEIGHT,
             callback=lambda:
             screen_manager.set_screen(
-                ScreenManager.GAME
+                ScreenManager.MODE_SELECT
             )
         ),
 
@@ -192,50 +313,60 @@ def build_game_buttons():
 
     global game_buttons
 
-    right_x = (
-        screen.get_width()
-        - SIDEBAR_WIDTH
-        + 30
-    )
+    sidebar_x = screen.get_width() - SIDEBAR_WIDTH
+    nav_x = sidebar_x + INNER_PADDING
+    nav_y = 84
 
-    top_y = screen.get_height() - 190
+    undo_width = 48
+    restart_width = 72
+    menu_width = 48
+    gap = 6
+
+    total_width = undo_width + restart_width + menu_width + gap * 2
+    start_x = nav_x + (SIDEBAR_WIDTH - INNER_PADDING * 2 - total_width) // 2
 
     game_buttons = [
 
         Button(
             "UNDO",
-            right_x,
-            top_y,
-            SMALL_BUTTON_WIDTH,
-            SMALL_BUTTON_HEIGHT,
+            start_x,
+            nav_y,
+            undo_width,
+            SMALL_BUTTON_HEIGHT - 6,
             callback=lambda:
-            history.undo(state)
+            history.undo(state),
+            font_size=14,
+            hover_scale=1.02
         ),
 
         Button(
             "RESTART",
-            right_x,
-            top_y + 60,
-            SMALL_BUTTON_WIDTH,
-            SMALL_BUTTON_HEIGHT,
+            start_x + undo_width + gap,
+            nav_y,
+            restart_width,
+            SMALL_BUTTON_HEIGHT - 6,
             callback=lambda: setattr(
             state,
             "confirm_dialog",
             "restart"
-            )
+            ),
+            font_size=14,
+            hover_scale=1.02
         ),
 
         Button(
             "MENU",
-            right_x,
-            top_y + 120,
-            SMALL_BUTTON_WIDTH,
-            SMALL_BUTTON_HEIGHT,
+            start_x + undo_width + gap + restart_width + gap,
+            nav_y,
+            menu_width,
+            SMALL_BUTTON_HEIGHT - 6,
             callback=lambda: setattr(
                 state,
                 "confirm_dialog",
-                "menu"
-            )
+                "mode_menu"
+            ),
+            font_size=14,
+            hover_scale=1.02
         )
     ]
 
@@ -313,26 +444,45 @@ def previous_tutorial():
 
 def build_tutorial_buttons():
 
+    global tutorial_menu_button
+    global tutorial_prev_button
     global tutorial_next_button
     global tutorial_back_button
 
-    tutorial_back_button = Button(
+    tutorial_menu_button = Button(
         "BACK",
         80,
         screen.get_height() - 100,
         140,
         50,
-        callback=previous_tutorial
+        callback=lambda: screen_manager.set_screen(
+            ScreenManager.MENU
+        )
+    )
+
+    tutorial_prev_button = Button(
+        "<",
+        screen.get_width() - 170,
+        screen.get_height() - 98,
+        52,
+        42,
+        callback=previous_tutorial,
+        font_size=22,
+        hover_scale=1.04
     )
 
     tutorial_next_button = Button(
-        "NEXT",
-        screen.get_width() - 220,
-        screen.get_height() - 100,
-        140,
-        50,
-        callback=next_tutorial
+        ">",
+        screen.get_width() - 104,
+        screen.get_height() - 98,
+        52,
+        42,
+        callback=next_tutorial,
+        font_size=22,
+        hover_scale=1.04
     )
+
+    tutorial_back_button = tutorial_menu_button
 
 
 def close_confirm_dialog():
@@ -340,13 +490,18 @@ def close_confirm_dialog():
     state.confirm_dialog = None
 
 
+def stay_on_board():
+
+    clear_end_dialog_state()
+
+
 def confirm_dialog_yes():
     if state.confirm_dialog == "restart":
         reset_game()
         close_confirm_dialog()
-    elif state.confirm_dialog == "menu":
+    elif state.confirm_dialog in ("menu", "mode_menu"):
         screen_manager.set_screen(
-            ScreenManager.MENU
+            ScreenManager.MODE_SELECT
         )
         close_confirm_dialog()
     elif state.confirm_dialog == "exit":
@@ -354,33 +509,95 @@ def confirm_dialog_yes():
         sys.exit()
 
 
+def restart_current_mode():
+
+    current_mode = state.game_mode
+    start_game(current_mode)
+    close_confirm_dialog()
+
+
+def return_to_mode_menu():
+
+    screen_manager.set_screen(
+        ScreenManager.MODE_SELECT
+    )
+    close_confirm_dialog()
+
+
+def return_to_main_menu():
+
+    screen_manager.set_screen(
+        ScreenManager.MENU
+    )
+    close_confirm_dialog()
+
+
 def build_confirm_dialog_buttons():
 
     global yes_button
     global no_button
+    global extra_confirm_button
 
-    box_x = screen.get_width() // 2 - 220
+    box_x = screen.get_width() // 2 - 260
     box_y = screen.get_height() // 2 - 120
 
     button_y = box_y + 150
 
+    yes_text = "YES"
+    no_text = "NO"
+    extra_button = None
+    yes_width = 150
+    no_width = 150
+    extra_width = 150
+    gap = 20
+
+    if state.confirm_dialog == "game_over":
+        yes_text = "MODE MENU"
+        no_text = "RESTART"
+    elif state.confirm_dialog == "win":
+        yes_text = "STAY"
+        no_text = "MODE MENU"
+        extra_button = Button(
+            "MENU",
+            0,
+            button_y,
+            extra_width,
+            60,
+            callback=return_to_main_menu
+        )
+        total_width = yes_width + no_width + extra_width + gap * 2
+        start_x = box_x + (520 - total_width) // 2
+        yes_x = start_x
+        no_x = yes_x + yes_width + gap
+        extra_x = no_x + no_width + gap
+    else:
+        total_width = yes_width + no_width + gap
+        start_x = box_x + (520 - total_width) // 2
+        yes_x = start_x
+        no_x = yes_x + yes_width + gap
+
     yes_button = Button(
-        "YES",
-        box_x + 70,
+        yes_text,
+        yes_x,
         button_y,
-        140,
+        yes_width,
         60,
-        callback=confirm_dialog_yes
+        callback=stay_on_board if state.confirm_dialog == "win" else (return_to_mode_menu if state.confirm_dialog == "game_over" else confirm_dialog_yes)
     )
 
     no_button = Button(
-        "NO",
-        box_x + 230,
+        no_text,
+        no_x,
         button_y,
-        140,
+        no_width,
         60,
-        callback=close_confirm_dialog
+        callback=return_to_mode_menu if state.confirm_dialog == "win" else (restart_current_mode if state.confirm_dialog == "game_over" else close_confirm_dialog)
     )
+
+    if extra_button:
+        extra_button.rect.x = extra_x
+
+    extra_confirm_button = extra_button
 
 def load_tutorial_image(path):
 
@@ -411,9 +628,9 @@ def draw_confirm_dialog(screen):
     screen.blit(overlay, (0, 0))
 
     box = pygame.Rect(
-        screen.get_width() // 2 - 220,
+        screen.get_width() // 2 - 260,
         screen.get_height() // 2 - 120,
-        440,
+        520,
         240
     )
 
@@ -434,6 +651,18 @@ def draw_confirm_dialog(screen):
     if state.confirm_dialog == "restart":
 
         text = "Restart the board?"
+
+    elif state.confirm_dialog == "win":
+
+        text = "You Win!"
+
+    elif state.confirm_dialog == "game_over":
+
+        text = "Game Over"
+
+    elif state.confirm_dialog == "mode_menu":
+
+        text = "Return to mode menu?"
 
     elif state.confirm_dialog == "menu":
 
@@ -458,6 +687,8 @@ def draw_confirm_dialog(screen):
     )
     yes_button.draw(screen)
     no_button.draw(screen)
+    if state.confirm_dialog == "win" and extra_confirm_button:
+        extra_confirm_button.draw(screen)
         
 # =====================================================
 # MAIN LOOP
@@ -475,6 +706,8 @@ while running:
     build_menu_buttons()
 
     build_game_buttons()
+
+    build_mode_select_buttons()
 
     build_about_button()
 
@@ -541,6 +774,14 @@ while running:
             continue
 
         # -------------------------------------------------
+        # MODE TRANSITION LOCK
+        # -------------------------------------------------
+
+        elif state.mode_transition_active:
+
+            continue
+
+        # -------------------------------------------------
         # MENU EVENTS
         # -------------------------------------------------
 
@@ -572,9 +813,31 @@ while running:
 
         elif screen_manager.is_tutorial():
 
-            tutorial_back_button.handle_event(event)
+            tutorial_menu_button.handle_event(event)
+
+            tutorial_prev_button.handle_event(event)
 
             tutorial_next_button.handle_event(event)
+
+            if event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_ESCAPE:
+
+                    screen_manager.set_screen(
+                        ScreenManager.MENU
+                    )
+
+        # -------------------------------------------------
+        # MODE SELECT SCREEN
+        # -------------------------------------------------
+
+        elif screen_manager.is_mode_select():
+
+            for button in mode_buttons:
+
+                button.handle_event(event)
+
+            mode_back_button.handle_event(event)
 
             if event.type == pygame.KEYDOWN:
 
@@ -757,6 +1020,87 @@ while running:
 
         analysis.update(state)
 
+        if state.game_won and not state.confirm_dialog:
+
+            if not state.win_sound_played:
+
+                audio.win.play()
+                state.win_sound_played = True
+
+            state.confirm_dialog = "win"
+
+        elif state.game_over and not state.confirm_dialog:
+
+            if not state.game_over_sound_played:
+
+                audio.game_over.play()
+                state.game_over_sound_played = True
+
+            state.confirm_dialog = "game_over"
+
+        current_time = pygame.time.get_ticks()
+
+        if state.alert_kind == "deadzone":
+
+            elapsed = current_time - state.alert_message_time
+
+            if elapsed >= state.alert_message_duration:
+
+                state.alert_kind = ""
+
+        # update advisor message after analysis unless a fresh deadzone alert is active
+        try:
+            new_msg = advisor.evaluate(state)
+        except Exception:
+            new_msg = ""
+
+        if (
+            state.alert_kind != "deadzone"
+            and new_msg
+            and new_msg != state.alert_message
+        ):
+            state.alert_message = new_msg
+            state.alert_message_time = current_time
+            state.alert_kind = "advisor"
+
+    if state.mode_transition_active:
+
+        transition_step = 18
+
+        if state.mode_transition_phase == "out":
+
+            state.mode_transition_alpha = min(
+                255,
+                state.mode_transition_alpha + transition_step
+            )
+
+            if state.mode_transition_alpha >= 255:
+
+                next_mode = state.mode_transition_next_mode
+
+                start_game(next_mode)
+
+                state.mode_transition_active = True
+                state.mode_transition_phase = "in"
+                state.mode_transition_alpha = 255
+                state.mode_transition_target = ScreenManager.GAME
+                state.mode_transition_next_mode = next_mode
+
+        elif state.mode_transition_phase == "in":
+
+            state.mode_transition_alpha = max(
+                0,
+                state.mode_transition_alpha - transition_step
+            )
+
+            if state.mode_transition_alpha <= 0:
+
+                state.mode_transition_alpha = 0
+                state.mode_transition_active = False
+                state.mode_transition_phase = ""
+                state.mode_transition_target = None
+                state.mode_transition_next_mode = None
+
     # =====================================================
     # DRAW
     # =====================================================
@@ -864,17 +1208,6 @@ while running:
             )
 
             y += 26
-
-        controls = about_small_font.render(
-            "ESC to return to menu",
-            True,
-            (120, 120, 160)
-        )
-
-        screen.blit(
-            controls,
-            (80, screen.get_height() - 140)
-        )
 
         about_back_button.draw(screen)
 
@@ -1010,6 +1343,68 @@ while running:
                 )
 
         # =================================================
+        # IMAGE GRID
+        # =================================================
+
+        elif "images" in page and page["images"]:
+
+            grid_images = [
+                load_tutorial_image(path)
+                for path in page["images"]
+            ]
+
+            grid_images = [
+                image for image in grid_images if image
+            ]
+
+            if grid_images:
+
+                left_x = 80
+                top_y = image_y
+                cell_max_width = 180
+                cell_max_height = 150
+                gap_x = 16
+                gap_y = 16
+
+                positions = [
+                    (left_x, top_y),
+                    (left_x + cell_max_width + gap_x, top_y),
+                    (left_x, top_y + cell_max_height + gap_y),
+                    (left_x + cell_max_width + gap_x, top_y + cell_max_height + gap_y)
+                ]
+
+                for image, (x_pos, y_pos) in zip(grid_images, positions):
+
+                    scale = min(
+                        cell_max_width / image.get_width(),
+                        cell_max_height / image.get_height()
+                    )
+
+                    width = int(
+                        image.get_width() * scale
+                    )
+
+                    height = int(
+                        image.get_height() * scale
+                    )
+
+                    image = pygame.transform.smoothscale(
+                        image,
+                        (width, height)
+                    )
+
+                    image_rect = image.get_rect()
+                    image_rect.center = (
+                        x_pos + cell_max_width // 2,
+                        y_pos + cell_max_height // 2
+                    )
+
+                    screen.blit(
+                        image,
+                        image_rect
+                    )
+
+        # =================================================
         # BODY TEXT
         # =================================================
 
@@ -1019,6 +1414,10 @@ while running:
         ):
 
             text_x = 740
+
+        elif "images" in page and page["images"]:
+
+            text_x = 620
 
         else:
 
@@ -1050,7 +1449,7 @@ while running:
         )
 
         controls = about_small_font.render(
-            "ESC to return to menu",
+            "Use the buttons below to move through the tutorial.",
             True,
             (120, 120, 160)
         )
@@ -1060,13 +1459,147 @@ while running:
             (80, screen.get_height() - 130)
         )
 
-        tutorial_back_button.draw(screen)
+        if page.get("footer_source"):
+
+            footer_source = about_small_font.render(
+                page["footer_source"],
+                True,
+                (150, 180, 255)
+            )
+
+            footer_source_rect = footer_source.get_rect(
+                center=(
+                    screen.get_width() // 2,
+                    screen.get_height() - 58
+                )
+            )
+
+            screen.blit(
+                footer_source,
+                footer_source_rect
+            )
+
+        if page.get("footer_note"):
+
+            footer_note = about_small_font.render(
+                page["footer_note"],
+                True,
+                (120, 120, 160)
+            )
+
+            footer_note_rect = footer_note.get_rect(
+                center=(
+                    screen.get_width() // 2,
+                    screen.get_height() - 34
+                )
+            )
+
+            screen.blit(
+                footer_note,
+                footer_note_rect
+            )
+
+        tutorial_menu_button.draw(screen)
+
+        tutorial_prev_button.draw(screen)
 
         tutorial_next_button.draw(screen)
 
+    elif screen_manager.is_mode_select():
+
+        mode_order = [
+            GAME_MODES["STANDARD"],
+            GAME_MODES["ENDLESS"],
+            GAME_MODES["HARDCORE"],
+        ]
+
+        hovered_theme = mode_order[0].theme
+
+        for index, button in enumerate(mode_buttons):
+            if button.is_hovered():
+                hovered_theme = mode_order[index].theme
+                break
+
+        screen.fill(hovered_theme.get("screen_tint", BACKGROUND_COLOR))
+
+        tint = pygame.Surface(
+            (screen_width, screen_height),
+            pygame.SRCALPHA
+        )
+
+        tint.fill(
+            (*hovered_theme.get("screen_tint", (8, 8, 24)), 70)
+        )
+        screen.blit(tint, (0, 0))
+
+        title = ui_renderer.title_font.render(
+            "SELECT MODE",
+            True,
+            hovered_theme.get("accent", TEXT_COLOR)
+        )
+
+        subtitle = about_small_font.render(
+            "Choose the rules for this run.",
+            True,
+            hovered_theme.get("accent_soft", (160, 170, 200))
+        )
+
+        screen.blit(
+            title,
+            (
+                screen.get_width() // 2 - title.get_width() // 2,
+                120
+            )
+        )
+
+        screen.blit(
+            subtitle,
+            (
+                screen.get_width() // 2 - subtitle.get_width() // 2,
+                170
+            )
+        )
+
+        for index, button in enumerate(mode_buttons):
+
+            mode = mode_order[index]
+            button.draw(screen)
+
+            desc = about_small_font.render(
+                mode.description,
+                True,
+                mode.theme.get("accent_soft", (165, 170, 200))
+            )
+
+            desc_x = button.rect.centerx - desc.get_width() // 2
+            desc_y = button.rect.y + 68
+
+            screen.blit(
+                desc,
+                (
+                    desc_x,
+                    desc_y
+                )
+            )
+
+        mode_back_button.draw(screen)
+
     elif screen_manager.is_game():
 
-        screen.fill(BACKGROUND_COLOR)
+        game_theme = getattr(state.game_mode, "theme", {})
+
+        screen.fill(
+            game_theme.get("screen_tint", BACKGROUND_COLOR)
+        )
+
+        overlay_alpha = game_theme.get("overlay_alpha", 24)
+
+        tint = pygame.Surface(
+            (screen_width, screen_height),
+            pygame.SRCALPHA
+        )
+        tint.fill((*game_theme.get("screen_tint", (8, 8, 24)), overlay_alpha))
+        screen.blit(tint, (0, 0))
 
         board_renderer.draw(
             screen,
@@ -1085,16 +1618,30 @@ while running:
             screen_height
         )
 
+        # compute board rect and pass to ui renderer so advisor tip can be drawn near board
+        board_rect = board_renderer.get_board_rect(screen_width, screen_height)
+
         ui_renderer.draw(
             screen,
             state,
             screen_width,
-            screen_height
+            screen_height,
+            board_rect
         )
 
         for button in game_buttons:
 
             button.draw(screen)
+
+    if state.mode_transition_active:
+
+        fade = pygame.Surface(
+            (screen_width, screen_height),
+            pygame.SRCALPHA
+        )
+
+        fade.fill((0, 0, 0, state.mode_transition_alpha))
+        screen.blit(fade, (0, 0))
         
     if state.confirm_dialog:
 
