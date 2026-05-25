@@ -4,6 +4,7 @@ import pygame
 import audio
 
 from utils.constants import *
+from utils.resource_path import resource_path
 
 from core.board import Board
 from core.state import GameState
@@ -37,7 +38,7 @@ screen = pygame.display.set_mode(
 
 
 solved_board_bg = pygame.image.load(
-    "assets/solvedboard.png"
+    resource_path("assets/solvedboard.png")
 ).convert_alpha()
 pygame.display.set_caption(TITLE)
 
@@ -230,9 +231,10 @@ def build_game_buttons():
             top_y + 120,
             SMALL_BUTTON_WIDTH,
             SMALL_BUTTON_HEIGHT,
-            callback=lambda:
-            screen_manager.set_screen(
-                ScreenManager.MENU
+            callback=lambda: setattr(
+                state,
+                "confirm_dialog",
+                "menu"
             )
         )
     ]
@@ -339,9 +341,14 @@ def close_confirm_dialog():
 
 
 def confirm_dialog_yes():
-
     if state.confirm_dialog == "restart":
         reset_game()
+        close_confirm_dialog()
+    elif state.confirm_dialog == "menu":
+        screen_manager.set_screen(
+            ScreenManager.MENU
+        )
+        close_confirm_dialog()
     elif state.confirm_dialog == "exit":
         pygame.quit()
         sys.exit()
@@ -380,10 +387,12 @@ def load_tutorial_image(path):
     if not path:
         return None
 
-    if not os.path.exists(path):
+    resolved_path = resource_path(path)
+
+    if not os.path.exists(resolved_path):
         return None
 
-    image = pygame.image.load(path)
+    image = pygame.image.load(resolved_path)
 
     return image.convert_alpha()    
 
@@ -425,6 +434,10 @@ def draw_confirm_dialog(screen):
     if state.confirm_dialog == "restart":
 
         text = "Restart the board?"
+
+    elif state.confirm_dialog == "menu":
+
+        text = "Return to menu?"
 
     else:
 
