@@ -12,6 +12,14 @@ class BoardRenderer:
         self.base_cell_size = CELL_SIZE
         self.cell_size = CELL_SIZE
 
+    def brighten_color(self, color, amount):
+
+        return (
+            min(255, int(color[0] * amount)),
+            min(255, int(color[1] * amount)),
+            min(255, int(color[2] * amount))
+        )
+
     # =====================================================
     # BOARD RECT
     # =====================================================
@@ -110,7 +118,10 @@ class BoardRenderer:
         shake_y=0
     ):
 
-        color = piece.color
+        color = self.brighten_color(
+            piece.color,
+            1.12 if alpha >= 255 else 1.22
+        )
 
         dark_color = (
             max(color[0] - 55, 0),
@@ -124,11 +135,77 @@ class BoardRenderer:
             min(color[2] + 50, 255)
         )
 
+        cell_size = max(1, int(self.cell_size * scale))
+
+        if alpha < 255:
+
+            tile_pixel_size = piece.size * cell_size
+
+            piece_surface = pygame.Surface(
+                (tile_pixel_size + 12, tile_pixel_size + 12),
+                pygame.SRCALPHA
+            )
+
+            for row in range(piece.size):
+
+                for col in range(piece.size):
+
+                    x = 6 + col * cell_size + 2 + shake_x
+                    y = 6 + row * cell_size + 2 + shake_y
+                    size = max(1, cell_size - 4)
+
+                    glow_surface = pygame.Surface(
+                        (size + 10, size + 10),
+                        pygame.SRCALPHA
+                    )
+
+                    pygame.draw.rect(
+                        glow_surface,
+                        (*glow_color, 50),
+                        (0, 0, size + 10, size + 10),
+                        border_radius=8
+                    )
+
+                    piece_surface.blit(
+                        glow_surface,
+                        (x - 5, y - 5)
+                    )
+
+                    pygame.draw.rect(
+                        piece_surface,
+                        color,
+                        (x, y, size, size),
+                        border_radius=6
+                    )
+
+                    pygame.draw.rect(
+                        piece_surface,
+                        dark_color,
+                        (x, y, size, size),
+                        2,
+                        border_radius=6
+                    )
+
+                    pygame.draw.rect(
+                        piece_surface,
+                        (255, 255, 255, 70),
+                        (
+                            x + 2,
+                            y + 2,
+                            size - 4,
+                            size // 3
+                        ),
+                        border_radius=4
+                    )
+
+            piece_surface.set_alpha(alpha)
+            screen.blit(piece_surface, (offset_x - 6, offset_y - 6))
+
+            return
+
         for row in range(piece.size):
 
             for col in range(piece.size):
-
-                cell_size = max(1, int(self.cell_size * scale))
 
                 x = (
                     offset_x
@@ -466,25 +543,4 @@ class BoardRenderer:
                 preview_x,
                 preview_y,
                 alpha=120
-            )
-
-            drag_x = (
-                mouse_x
-                - (
-                    piece.size * self.cell_size
-                ) // 2
-            )
-
-            drag_y = (
-                mouse_y
-                - (
-                    piece.size * self.cell_size
-                ) // 2
-            )
-
-            self.draw_piece(
-                screen,
-                piece,
-                drag_x,
-                drag_y
             )
