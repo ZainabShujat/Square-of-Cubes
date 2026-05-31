@@ -1,4 +1,4 @@
-from utils.constants import TILE_COLORS
+from utils.constants import get_tile_color
 
 
 class Piece:
@@ -15,7 +15,7 @@ class Piece:
         self.offset_x = 0
         self.offset_y = 0
 
-        self.color = TILE_COLORS[size]
+        self.color = get_tile_color(size)
 
     @property
     def area(self):

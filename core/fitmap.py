@@ -1,6 +1,3 @@
-from utils.constants import BOARD_SIZE
-
-
 class FitMap:
 
     def __init__(self, board):
@@ -15,7 +12,7 @@ class FitMap:
 
     def compute(self, state):
 
-        size = BOARD_SIZE
+        size = self.board.size
 
         occupied = self.board.get_occupied_cells(state)
 

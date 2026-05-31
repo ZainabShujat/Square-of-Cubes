@@ -6,7 +6,7 @@ from core.game_modes import STANDARD
 
 class GameState:
 
-    def __init__(self):
+    def __init__(self, initial_tile_counts=None):
         self.solvable = True
         self.confirm_dialog = None
 
@@ -20,7 +20,9 @@ class GameState:
         # inventory
         # =========================
 
-        self.remaining_tiles = INITIAL_TILE_COUNTS.copy()
+        self.remaining_tiles = self._normalize_tile_counts(
+            initial_tile_counts or INITIAL_TILE_COUNTS
+        )
 
         # =========================
         # selected tile size
@@ -51,6 +53,7 @@ class GameState:
         self.mobility_data = {}
         self.deadzone_count = 0
         self.previous_deadzone_count = 0
+        self.move_count = 0
         self.score = 0
         self.advisor_message = ""
         self.advisor_message_time = 0
@@ -73,6 +76,11 @@ class GameState:
         # =================================================
 
         self.game_mode = STANDARD
+        self.current_level = None
+        self.current_level_index = None
+        self.return_screen = None
+
+        self.level_result = None
 
         self.game_over = False
         self.game_over_sound_played = False
@@ -87,6 +95,20 @@ class GameState:
 
         
         
+
+    def _normalize_tile_counts(self, tile_counts):
+
+        normalized = {
+            size: 0
+            for size in INITIAL_TILE_COUNTS
+        }
+
+        for size, count in tile_counts.items():
+
+            normalized[size] = count
+
+        return normalized
+
 
     # =====================================================
     # INVENTORY

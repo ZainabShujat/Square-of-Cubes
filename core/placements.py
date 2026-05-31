@@ -35,15 +35,27 @@ class PlacementGenerator:
 
         results = []
 
-        fitmap = self.fitmap.get_map()
+        # ensure fit map is up-to-date
+        try:
+            # if FitMap exposes a compute/get_map API, it's safe to call compute here
+            self.fitmap.compute(state)
+        except Exception:
+            pass
 
+        # query via FitMap API to avoid depending on internal map structure
         for y in range(self.board.size):
-
             for x in range(self.board.size):
+                try:
+                    largest = self.fitmap.largest_square_at(x, y)
+                except Exception:
+                    # fallback: try indexing raw map if available
+                    fmap = self.fitmap.get_map()
+                    try:
+                        largest = fmap[y][x]
+                    except Exception:
+                        largest = 0
 
-                # fitmap tells us largest valid square here
-                if fitmap[y][x] >= size:
-
+                if largest >= size:
                     results.append((x, y))
 
         return results

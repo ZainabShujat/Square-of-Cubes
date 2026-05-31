@@ -203,7 +203,9 @@ class AnalysisEngine:
         )
 
         limit = (
-            state.game_mode.deadzone_limit
+            state.current_level.deadzone_limit
+            if getattr(state, "current_level", None)
+            else state.game_mode.deadzone_limit
         )
 
         score = self.solvability_score(state)

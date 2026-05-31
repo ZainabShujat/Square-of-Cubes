@@ -217,7 +217,7 @@ class UIRenderer:
 
         label, color = self.get_status_text(state)
 
-        status_rect = pygame.Rect(section_x - 10, 142, section_width + 20, 78)
+        status_rect = pygame.Rect(section_x - 10, 142, section_width + 20, 96)
         mode_rect = pygame.Rect(section_x - 10, 236, section_width + 20, 72)
         deadzone_rect = pygame.Rect(section_x - 10, 330, section_width + 20, 78)
         health_rect = pygame.Rect(section_x - 10, 426, section_width + 20, 72)
@@ -227,19 +227,28 @@ class UIRenderer:
         self.draw_panel_card(screen, deadzone_rect, fill_color=panel_fill, border_color=panel_border)
         self.draw_panel_card(screen, health_rect, fill_color=panel_fill, border_color=panel_border)
 
+        level_number = getattr(getattr(state, "current_level", None), "number", None)
+        if level_number is not None:
+            level_label = self.small_font.render(
+                f"Level {level_number}",
+                True,
+                label_accent
+            )
+            screen.blit(level_label, (section_x + 10, 150))
+
         status_label = self.small_font.render(
             "Main Status",
             True,
             label_accent
         )
-        screen.blit(status_label, (section_x + 10, 150))
+        screen.blit(status_label, (section_x + 10, 168))
 
         status = self.status_font.render(
             label,
             True,
             color
         )
-        screen.blit(status, (section_x + 10, 172))
+        screen.blit(status, (section_x + 10, 190))
 
         mode_name = getattr(state.game_mode, "name", "STANDARD")
         mode_value = f"{mode_name} MODE"
@@ -317,14 +326,14 @@ class UIRenderer:
                 text_surface = self.text_font.render(msg, True, text_color)
                 text_width = text_surface.get_width()
                 banner_width = min(
-                    board_rect.width,
-                    max(180, text_width + 28)
+                    screen.get_width() - 80,
+                    max(240, text_width + 40)
                 )
-                banner_x = board_rect.x + (board_rect.width - banner_width) // 2
-                banner_y = max(10, board_rect.y - 56)
+                banner_x = (screen.get_width() - banner_width) // 2
+                banner_y = 18
 
                 banner_surface = pygame.Surface(
-                    (banner_width, 44),
+                    (banner_width, 48),
                     pygame.SRCALPHA
                 )
 
@@ -348,5 +357,5 @@ class UIRenderer:
 
                 text_surface.set_alpha(alpha)
                 text_x = banner_x + (banner_width - text_surface.get_width()) // 2
-                text_y = banner_y + (44 - text_surface.get_height()) // 2 - 1
+                text_y = banner_y + (48 - text_surface.get_height()) // 2 - 1
                 screen.blit(text_surface, (text_x, text_y))

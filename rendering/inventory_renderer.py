@@ -229,7 +229,7 @@ class InventoryRenderer:
             border_radius=18
         )
 
-        border_color = TILE_COLORS[size] if selected else GRID_COLOR
+        border_color = get_tile_color(size) if selected else GRID_COLOR
 
         pygame.draw.rect(
             screen,
@@ -245,7 +245,7 @@ class InventoryRenderer:
         start_x = rect.x + (rect.width - preview_size) // 2
         start_y = rect.y + (rect.height - preview_size) // 2
 
-        color = TILE_COLORS[size]
+        color = get_tile_color(size)
 
         for row in range(size):
             for col in range(size):

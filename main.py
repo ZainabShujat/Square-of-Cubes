@@ -11,6 +11,7 @@ from core.state import GameState
 from core.analysis import AnalysisEngine
 from core.advisor import Advisor
 from core.game_modes import GAME_MODES
+from core.levels import LEARNING_LEVELS, get_next_learning_level
 
 from core.history import HistoryManager
 
@@ -91,11 +92,33 @@ history = HistoryManager()
 # HELPERS
 # =====================================================
 
-def reset_game():
+def reset_game(initial_tile_counts=None):
 
     global state
 
-    state = GameState()
+    state = GameState(initial_tile_counts)
+
+
+def configure_board(board_size):
+
+    global board
+    global analysis
+
+    board = Board(board_size)
+    analysis = AnalysisEngine(board)
+
+
+def open_level_menu():
+
+    global level_menu_page
+
+    level_menu_page = 0
+    screen_manager.set_screen(ScreenManager.LEVEL_SELECT)
+
+
+def open_level_result():
+
+    screen_manager.set_screen(ScreenManager.LEVEL_RESULT)
 
 
 def clear_end_dialog_state():
@@ -107,11 +130,22 @@ def clear_end_dialog_state():
     state.game_over_sound_played = False
 
 
-def start_game(mode):
+def start_game(mode, level=None):
 
-    reset_game()
+    configure_board(level.board_size if level else BOARD_SIZE)
+
+    reset_game(level.inventory if level else None)
+
     history.undo_stack.clear()
     state.game_mode = mode
+    state.current_level = level
+    state.current_level_index = (
+        level.number - 1 if level else None
+    )
+    state.level_result = None
+    state.return_screen = (
+        ScreenManager.LEVEL_SELECT if level else ScreenManager.MODE_SELECT
+    )
     screen_manager.set_screen(ScreenManager.GAME)
 
 
@@ -238,6 +272,26 @@ mode_buttons = []
 
 mode_back_button = None
 
+level_buttons = []
+
+level_back_button = None
+
+level_page_prev_button = None
+
+level_page_next_button = None
+
+level_page_levels = []
+
+level_menu_page = 0
+
+level_result_replay_button = None
+
+level_result_next_button = None
+
+level_result_menu_button = None
+
+level_result_buttons = []
+
 # =====================================================
 # BUILD MENU BUTTONS
 # =====================================================
@@ -251,7 +305,8 @@ def build_menu_buttons():
         - BUTTON_WIDTH // 2
     )
 
-    start_y = 240
+    start_y = 216
+    gap = 74
 
     menu_buttons = [
 
@@ -268,9 +323,19 @@ def build_menu_buttons():
         ),
 
         Button(
+            "LEARN / PRACTICE",
+            center_x,
+            start_y + gap,
+            BUTTON_WIDTH,
+            BUTTON_HEIGHT,
+            callback=open_level_menu,
+            font_size=18
+        ),
+
+        Button(
             "ABOUT",
             center_x,
-            start_y + 90,
+            start_y + gap * 2,
             BUTTON_WIDTH,
             BUTTON_HEIGHT,
             callback=lambda:
@@ -282,7 +347,7 @@ def build_menu_buttons():
         Button(
             "TUTORIAL",
             center_x,
-            start_y + 180,
+            start_y + gap * 3,
             BUTTON_WIDTH,
             BUTTON_HEIGHT,
             callback=lambda:
@@ -294,7 +359,7 @@ def build_menu_buttons():
         Button(
             "EXIT",
             center_x,
-            start_y + 270,
+            start_y + gap * 4,
             BUTTON_WIDTH,
             BUTTON_HEIGHT,
             callback=lambda: setattr(
@@ -303,6 +368,109 @@ def build_menu_buttons():
             "exit"
         ))
     ]
+
+
+def build_level_buttons():
+
+    global level_buttons
+    global level_back_button
+    global level_page_prev_button
+    global level_page_next_button
+    global level_page_levels
+    global level_menu_page
+
+    level_buttons = []
+    level_page_levels = []
+
+    columns = 4
+    rows = 5
+    per_page = columns * rows
+    page_count = max(1, (len(LEARNING_LEVELS) + per_page - 1) // per_page)
+
+    if level_menu_page >= page_count:
+        level_menu_page = page_count - 1
+
+    start_index = level_menu_page * per_page
+    level_page_levels = LEARNING_LEVELS[start_index:start_index + per_page]
+
+    button_width = 170
+    button_height = 72
+    gap_x = 18
+    gap_y = 14
+    grid_width = columns * button_width + (columns - 1) * gap_x
+    start_x = (screen.get_width() - grid_width) // 2
+    start_y = 112
+
+    def shift_page(delta):
+
+        global level_menu_page
+
+        level_menu_page = max(0, min(page_count - 1, level_menu_page + delta))
+
+    for index, level in enumerate(level_page_levels):
+
+        row = index // columns
+        col = index % columns
+
+        x = start_x + col * (button_width + gap_x)
+        y = start_y + row * (button_height + gap_y)
+
+        level_buttons.append(
+            Button(
+                f"LEVEL {level.number}",
+                x,
+                y,
+                button_width,
+                button_height,
+                callback=lambda selected_level=level: start_game(
+                    GAME_MODES[selected_level.mode_key],
+                    selected_level
+                ),
+                font_size=22,
+                hover_scale=1.03,
+                bg_color=(22, 22, 46),
+                hover_bg_color=(40, 40, 74),
+                border_color=(96, 108, 190),
+                hover_border_color=(178, 186, 255),
+                text_color=TEXT_COLOR,
+                text_offset_y=-2,
+                pulse_amount=0.004,
+                pulse_period=3000
+            )
+        )
+
+    level_back_button = Button(
+        "BACK",
+        80,
+        screen.get_height() - 100,
+        140,
+        50,
+        callback=lambda: screen_manager.set_screen(
+            ScreenManager.MENU
+        )
+    )
+
+    level_page_prev_button = Button(
+        "<",
+        screen.get_width() // 2 - 170,
+        screen.get_height() - 96,
+        52,
+        42,
+        callback=lambda: shift_page(-1),
+        font_size=22,
+        hover_scale=1.04
+    )
+
+    level_page_next_button = Button(
+        ">",
+        screen.get_width() // 2 + 118,
+        screen.get_height() - 96,
+        52,
+        42,
+        callback=lambda: shift_page(1),
+        font_size=22,
+        hover_scale=1.04
+    )
 
 
 # =====================================================
@@ -497,11 +665,11 @@ def stay_on_board():
 
 def confirm_dialog_yes():
     if state.confirm_dialog == "restart":
-        reset_game()
+        start_game(state.game_mode, state.current_level)
         close_confirm_dialog()
     elif state.confirm_dialog in ("menu", "mode_menu"):
         screen_manager.set_screen(
-            ScreenManager.MODE_SELECT
+            state.return_screen or ScreenManager.MODE_SELECT
         )
         close_confirm_dialog()
     elif state.confirm_dialog == "exit":
@@ -512,16 +680,111 @@ def confirm_dialog_yes():
 def restart_current_mode():
 
     current_mode = state.game_mode
-    start_game(current_mode)
+    start_game(current_mode, state.current_level)
     close_confirm_dialog()
 
 
 def return_to_mode_menu():
 
+    return_to_previous_menu()
+
+
+def return_to_previous_menu():
+
     screen_manager.set_screen(
-        ScreenManager.MODE_SELECT
+        state.return_screen or ScreenManager.MODE_SELECT
     )
     close_confirm_dialog()
+
+
+def close_level_result():
+
+    state.level_result = None
+
+
+def return_to_level_menu():
+
+    close_level_result()
+    screen_manager.set_screen(ScreenManager.LEVEL_SELECT)
+
+
+def replay_current_level():
+
+    if state.current_level:
+        start_game(state.game_mode, state.current_level)
+
+
+def go_to_next_level():
+
+    next_level = get_next_learning_level(state.current_level)
+
+    if next_level:
+        start_game(GAME_MODES[next_level.mode_key], next_level)
+    else:
+        return_to_level_menu()
+
+
+def level_stars_for_result(won, deadzone_count, gap_count, deadzone_limit):
+
+    if not won:
+        return 0
+
+    if deadzone_count == 0 and gap_count == 0:
+        return 3
+
+    if deadzone_count <= max(1, deadzone_limit // 2):
+        return 2
+
+    return 1
+
+
+def finalize_level_run(outcome):
+
+    state.level_result = build_level_result_data(outcome)
+
+    if outcome == "win" and not state.win_sound_played:
+
+        audio.win.play()
+        state.win_sound_played = True
+
+    elif outcome == "lose" and not state.game_over_sound_played:
+
+        audio.game_over.play()
+        state.game_over_sound_played = True
+
+    open_level_result()
+
+
+def build_level_result_data(outcome):
+
+    deadzone_count = state.deadzone_count
+    gap_count = len(state.dead_regions)
+    gap_cells = sum(len(region) for region in state.dead_regions)
+    deadzone_limit = (
+        state.current_level.deadzone_limit
+        if state.current_level
+        else state.game_mode.deadzone_limit or 0
+    )
+    won = outcome == "win"
+
+    return {
+        "outcome": outcome,
+        "level_number": state.current_level.number if state.current_level else None,
+        "board_size": board.size,
+        "deadzone_limit": deadzone_limit,
+        "deadzone_count": deadzone_count,
+        "gap_count": gap_count,
+        "gap_cells": gap_cells,
+        "score": state.score,
+        "moves": state.move_count,
+        "stars": level_stars_for_result(
+            won,
+            deadzone_count,
+            gap_count,
+            deadzone_limit
+        ),
+        "max_stars": 3
+    }
 
 
 def return_to_main_menu():
@@ -551,8 +814,14 @@ def build_confirm_dialog_buttons():
     extra_width = 150
     gap = 20
 
+    menu_label = (
+        "LEVEL MENU"
+        if state.return_screen == ScreenManager.LEVEL_SELECT
+        else "MODE MENU"
+    )
+
     if state.confirm_dialog == "game_over":
-        yes_text = "MODE MENU"
+        yes_text = menu_label
         no_text = "RESTART"
         # center the two-button layout for game over as well
         total_width = yes_width + no_width + gap
@@ -561,7 +830,7 @@ def build_confirm_dialog_buttons():
         no_x = yes_x + yes_width + gap
     elif state.confirm_dialog == "win":
         yes_text = "STAY"
-        no_text = "MODE MENU"
+        no_text = menu_label
         extra_button = Button(
             "MENU",
             0,
@@ -603,6 +872,210 @@ def build_confirm_dialog_buttons():
         extra_button.rect.x = extra_x
 
     extra_confirm_button = extra_button
+
+
+def build_level_result_buttons():
+
+    global level_result_replay_button
+    global level_result_next_button
+    global level_result_menu_button
+    global level_result_buttons
+
+    level_result_buttons = []
+
+    result = state.level_result or {}
+    outcome = result.get("outcome")
+    next_level = get_next_learning_level(state.current_level) if state.current_level else None
+    panel_y = screen.get_height() // 2 - 190
+    panel_height = 390
+    button_y = panel_y + panel_height - 72
+    button_width = 150
+    button_height = 60
+    gap = 18
+
+    if outcome == "win":
+
+        has_next = next_level is not None
+        total_width = button_width * (3 if has_next else 2) + gap * (2 if has_next else 1)
+        start_x = screen.get_width() // 2 - total_width // 2
+
+        level_result_replay_button = Button(
+            "REPLAY",
+            start_x,
+            button_y,
+            button_width,
+            button_height,
+            callback=replay_current_level
+        )
+
+        if has_next:
+            level_result_next_button = Button(
+                "NEXT LEVEL",
+                start_x + button_width + gap,
+                button_y,
+                button_width,
+                button_height,
+                callback=go_to_next_level
+            )
+
+            level_result_menu_button = Button(
+                "MENU",
+                start_x + (button_width + gap) * 2,
+                button_y,
+                button_width,
+                button_height,
+                callback=return_to_level_menu
+            )
+        else:
+            level_result_next_button = Button(
+                "MENU",
+                start_x + button_width + gap,
+                button_y,
+                button_width,
+                button_height,
+                callback=return_to_level_menu
+            )
+
+            level_result_menu_button = None
+
+        level_result_buttons = [level_result_replay_button]
+
+        if level_result_next_button:
+            level_result_buttons.append(level_result_next_button)
+
+        if level_result_menu_button:
+            level_result_buttons.append(level_result_menu_button)
+
+    else:
+
+        total_width = button_width * 2 + gap
+        start_x = screen.get_width() // 2 - total_width // 2
+
+        level_result_replay_button = Button(
+            "REPLAY",
+            start_x,
+            button_y,
+            button_width,
+            button_height,
+            callback=replay_current_level
+        )
+
+        level_result_menu_button = Button(
+            "MENU",
+            start_x + button_width + gap,
+            button_y,
+            button_width,
+            button_height,
+            callback=return_to_level_menu
+        )
+
+        level_result_next_button = None
+
+        level_result_buttons = [
+            level_result_replay_button,
+            level_result_menu_button
+        ]
+
+
+def draw_level_result_screen(screen):
+    result = state.level_result or {}
+    outcome = result.get("outcome", "lose")
+    is_win = outcome == "win"
+
+    overlay = pygame.Surface(
+        (
+            screen.get_width(),
+            screen.get_height()
+        ),
+        pygame.SRCALPHA
+    )
+
+    overlay.fill((0, 0, 0, 190))
+    screen.blit(overlay, (0, 0))
+
+    panel = pygame.Rect(
+        screen.get_width() // 2 - 300,
+        screen.get_height() // 2 - 190,
+        600,
+        390
+    )
+
+    pygame.draw.rect(
+        screen,
+        (16, 18, 38),
+        panel,
+        border_radius=22
+    )
+
+    border_color = (120, 200, 255) if is_win else (255, 110, 110)
+
+    pygame.draw.rect(
+        screen,
+        border_color,
+        panel,
+        width=2,
+        border_radius=22
+    )
+
+    title = menu_font.render(
+        "LEVEL COMPLETE" if is_win else "LEVEL FAILED",
+        True,
+        TEXT_COLOR if is_win else (255, 200, 200)
+    )
+
+    screen.blit(
+        title,
+        (
+            panel.centerx - title.get_width() // 2,
+            panel.y + 10
+        )
+    )
+
+    stars = result.get("stars", 0)
+    max_stars = result.get("max_stars", 3)
+
+    star_text = about_font.render(
+        f"Stars: {'★' * stars}{'☆' * (max_stars - stars)}  ({stars}/{max_stars})",
+        True,
+        (255, 220, 120)
+    )
+
+    screen.blit(
+        star_text,
+        (
+            panel.centerx - star_text.get_width() // 2,
+            panel.y + 54
+        )
+    )
+
+    metrics = [
+        f"Level {result.get('level_number', '?')}  |  {result.get('board_size', '?')}x{result.get('board_size', '?')} board",
+        f"Dead zones: {result.get('deadzone_count', 0)} / {result.get('deadzone_limit', 0)}",
+        f"Gaps: {result.get('gap_count', 0)} regions, {result.get('gap_cells', 0)} cells",
+        f"No. of moves: {result.get('moves', 0)}",
+        f"Solvability score: {result.get('score', 0)}",
+    ]
+
+    start_y = panel.y + 102
+
+    for index, line in enumerate(metrics):
+
+        line_surface = about_font.render(
+            line,
+            True,
+            (220, 225, 240)
+        )
+
+        screen.blit(
+            line_surface,
+            (
+                panel.centerx - line_surface.get_width() // 2,
+                start_y + index * 28
+            )
+        )
+
+    for button in level_result_buttons:
+        button.draw(screen)
 
 def load_tutorial_image(path):
 
@@ -667,11 +1140,19 @@ def draw_confirm_dialog(screen):
 
     elif state.confirm_dialog == "mode_menu":
 
-        text = "Return to mode menu?"
+        text = (
+            "Return to level menu?"
+            if state.return_screen == ScreenManager.LEVEL_SELECT
+            else "Return to mode menu?"
+        )
 
     elif state.confirm_dialog == "menu":
 
-        text = "Return to menu?"
+        text = (
+            "Return to level menu?"
+            if state.return_screen == ScreenManager.LEVEL_SELECT
+            else "Return to mode menu?"
+        )
 
     else:
 
@@ -714,11 +1195,15 @@ while running:
 
     build_mode_select_buttons()
 
+    build_level_buttons()
+
     build_about_button()
 
     build_tutorial_buttons()
 
     build_confirm_dialog_buttons()
+
+    build_level_result_buttons()
 
     # =================================================
     # EVENTS
@@ -808,9 +1293,7 @@ while running:
 
                 if event.key == pygame.K_ESCAPE:
 
-                    screen_manager.set_screen(
-                        ScreenManager.MENU
-                    )
+                    state.confirm_dialog = "menu"
 
         # -------------------------------------------------
         # TUTORIAL SCREEN
@@ -851,6 +1334,46 @@ while running:
                     screen_manager.set_screen(
                         ScreenManager.MENU
                     )
+
+        # -------------------------------------------------
+        # LEVEL SELECT SCREEN
+        # -------------------------------------------------
+
+        elif screen_manager.is_level_select():
+
+            for button in level_buttons:
+
+                button.handle_event(event)
+
+            level_page_prev_button.handle_event(event)
+
+            level_page_next_button.handle_event(event)
+
+            level_back_button.handle_event(event)
+
+            if event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_ESCAPE:
+
+                    screen_manager.set_screen(
+                        ScreenManager.MENU
+                    )
+
+        # -------------------------------------------------
+        # LEVEL RESULT SCREEN
+        # -------------------------------------------------
+
+        elif screen_manager.is_level_result():
+
+            for button in level_result_buttons:
+
+                button.handle_event(event)
+
+            if event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_ESCAPE:
+
+                    return_to_level_menu()
 
         # -------------------------------------------------
         # GAME EVENTS
@@ -900,7 +1423,8 @@ while running:
                                 mouse_x,
                                 mouse_y,
                                 screen_width,
-                                screen_height
+                                screen_height,
+                                board.size
                             )
                         )
 
@@ -935,13 +1459,16 @@ while running:
 
                         piece = state.dragging_piece
 
+                        state.move_count += 1
+
                         grid_x, grid_y = (
                             board_renderer.screen_to_grid(
                                 screen,
                                 mouse_x,
                                 mouse_y,
                                 screen_width,
-                                screen_height
+                                screen_height,
+                                board.size
                             )
                         )
 
@@ -1001,7 +1528,8 @@ while running:
                             mouse_x,
                             mouse_y,
                             screen_width,
-                            screen_height
+                            screen_height,
+                            board.size
                         )
                     )
 
@@ -1025,7 +1553,17 @@ while running:
 
         analysis.update(state)
 
-        if state.game_won and not state.confirm_dialog:
+        if state.current_level:
+
+            if state.game_won and not state.level_result:
+
+                finalize_level_run("win")
+
+            elif state.game_over and not state.level_result:
+
+                finalize_level_run("lose")
+
+        elif state.game_won and not state.confirm_dialog:
 
             if not state.win_sound_played:
 
@@ -1553,7 +2091,7 @@ while running:
             title,
             (
                 screen.get_width() // 2 - title.get_width() // 2,
-                120
+                104
             )
         )
 
@@ -1561,7 +2099,7 @@ while running:
             subtitle,
             (
                 screen.get_width() // 2 - subtitle.get_width() // 2,
-                170
+                152
             )
         )
 
@@ -1588,6 +2126,76 @@ while running:
             )
 
         mode_back_button.draw(screen)
+
+    elif screen_manager.is_level_select():
+
+        screen.fill((12, 18, 30))
+
+        tint = pygame.Surface(
+            (screen_width, screen_height),
+            pygame.SRCALPHA
+        )
+
+        tint.fill((24, 28, 48, 80))
+        screen.blit(tint, (0, 0))
+
+        title = ui_renderer.title_font.render(
+            "SELECT LEVEL",
+            True,
+            (210, 225, 255)
+        )
+
+        subtitle = about_small_font.render(
+            "Select a practice level.",
+            True,
+            (170, 180, 210)
+        )
+
+        screen.blit(
+            title,
+            (
+                screen.get_width() // 2 - title.get_width() // 2,
+                48
+            )
+        )
+
+        screen.blit(
+            subtitle,
+            (
+                screen.get_width() // 2 - subtitle.get_width() // 2,
+                76
+            )
+        )
+
+        for index, button in enumerate(level_buttons):
+
+            button.draw(screen)
+
+        page_count = max(1, (len(LEARNING_LEVELS) + 19) // 20)
+
+        page_label = about_small_font.render(
+            f"Page {level_menu_page + 1} / {page_count}",
+            True,
+            (150, 160, 190)
+        )
+
+        screen.blit(
+            page_label,
+            (
+                screen.get_width() // 2 - page_label.get_width() // 2,
+                screen.get_height() - 90
+            )
+        )
+
+        level_page_prev_button.draw(screen)
+
+        level_page_next_button.draw(screen)
+
+        level_back_button.draw(screen)
+
+    elif screen_manager.is_level_result():
+
+        draw_level_result_screen(screen)
 
     elif screen_manager.is_game():
 
@@ -1624,7 +2232,11 @@ while running:
         )
 
         # compute board rect and pass to ui renderer so advisor tip can be drawn near board
-        board_rect = board_renderer.get_board_rect(screen_width, screen_height)
+        board_rect = board_renderer.get_board_rect(
+            screen_width,
+            screen_height,
+            board.size
+        )
 
         ui_renderer.draw(
             screen,

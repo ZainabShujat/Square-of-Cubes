@@ -27,7 +27,8 @@ class BoardRenderer:
     def get_board_rect(
         self,
         screen_width,
-        screen_height
+        screen_height,
+        board_size
     ):
 
         available_width = (
@@ -51,11 +52,11 @@ class BoardRenderer:
             8,
             min(
                 self.base_cell_size,
-                max_board_size // GRID_SIZE
+                max_board_size // board_size
             )
         )
 
-        board_pixel_size = GRID_SIZE * self.cell_size
+        board_pixel_size = board_size * self.cell_size
 
         board_x = OUTER_PADDING + max(
             0,
@@ -84,12 +85,14 @@ class BoardRenderer:
         mouse_x,
         mouse_y,
         screen_width,
-        screen_height
+        screen_height,
+        board_size
     ):
 
         board_rect = self.get_board_rect(
             screen_width,
-            screen_height
+            screen_height,
+            board_size
         )
 
         grid_x = (
@@ -374,7 +377,8 @@ class BoardRenderer:
 
         board_rect = self.get_board_rect(
             screen_width,
-            screen_height
+            screen_height,
+            board.size
         )
 
         play_area_rect = pygame.Rect(
@@ -398,9 +402,9 @@ class BoardRenderer:
             border_radius=16
         )
 
-        for row in range(GRID_SIZE):
+        for row in range(board.size):
 
-            for col in range(GRID_SIZE):
+            for col in range(board.size):
 
                 rect = pygame.Rect(
                     board_rect.x + col * self.cell_size,
@@ -524,7 +528,8 @@ class BoardRenderer:
                 mouse_x,
                 mouse_y,
                 screen_width,
-                screen_height
+                screen_height,
+                board.size
             )
 
             preview_x = (

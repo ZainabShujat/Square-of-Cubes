@@ -3,9 +3,9 @@ from utils.constants import BOARD_SIZE
 
 class Board:
 
-    def __init__(self):
+    def __init__(self, size=BOARD_SIZE):
 
-        self.size = BOARD_SIZE
+        self.size = size
 
     # =====================================================
     # CELL OCCUPANCY

@@ -115,6 +115,14 @@ PIECE_COLORS = [
 
 ]
 
+
+def get_tile_color(size):
+
+    if size in TILE_COLORS:
+        return TILE_COLORS[size]
+
+    return PIECE_COLORS[(size - 1) % len(PIECE_COLORS)]
+
 # =========================
 # MENU
 # =========================
