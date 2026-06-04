@@ -273,6 +273,15 @@ def enforce_min_sizes(inventory, max_tile, board_area):
     return inv
 
 
+def ensure_min_sizes_present(inventory, max_tile):
+    """Ensure at least one tile of each size 1..max_tile is present."""
+    inv = dict(inventory)
+    for s in range(1, max_tile + 1):
+        if inv.get(s, 0) == 0:
+            inv[s] = 1
+    return inv
+
+
 def compute_stats_from_inventory(board_size, inventory):
     stats = {}
     distinct = len([s for s, c in inventory.items() if c > 0])
@@ -579,7 +588,9 @@ def inventory_is_structurally_rich(board_size, inventory, stats):
 
     tile_count = inventory_tile_count(inventory)
 
-    if inventory_total_area(inventory) != board_size * board_size:
+    # Allow inventory area to exceed board area (extra tiles permitted).
+    # Only reject when insufficient area to fill the board.
+    if inventory_total_area(inventory) < board_size * board_size:
         return False
 
     if inventory_is_trivial(board_size, get_max_tile(board_size), inventory):
@@ -625,142 +636,103 @@ def inventory_is_structurally_rich(board_size, inventory, stats):
 
 def generate_inventory(board_size):
 
+    """Generate a valid inventory for the given board_size.
+    
+    Conservative approach: one-of-each-size (1..max_tile) + 1x1 fillers.
+    """
     max_tile = get_max_tile(board_size)
-    # special-case very small boards with brute-force search to avoid tiny-tile explosion
-    if board_size <= 6:
-        inv = find_best_composition_for_small_board(board_size, max_tile, enforce_all_sizes=True)
-        if inv:
-            inv = normalize_inventory(inv)
-            stats = compute_stats_from_inventory(board_size, inv)
-            if inventory_is_structurally_rich(board_size, inv, stats):
-                return {
-                    "board_size": board_size,
-                    "inventory": inv,
-                    "total_area": board_size * board_size,
-                    "tile_count": inventory_tile_count(inv),
-                    "score": score_inventory_candidate(board_size, max_tile, inv, max(inv.keys())),
-                }
-        # fallback: try without enforcing all sizes
-        inv = find_best_composition_for_small_board(board_size, max_tile, enforce_all_sizes=False)
-        if inv:
-            inv = normalize_inventory(inv)
-            stats = compute_stats_from_inventory(board_size, inv)
-            if inventory_is_structurally_rich(board_size, inv, stats):
-                return {
-                    "board_size": board_size,
-                    "inventory": inv,
-                    "total_area": board_size * board_size,
-                    "tile_count": inventory_tile_count(inv),
-                    "score": score_inventory_candidate(board_size, max_tile, inv, max(inv.keys())),
-                }
-    candidates = []
-    styles = ["corridor", "fragmented", "balanced", "dense"]
 
-    for root_size in choose_root_sizes(board_size, max_tile):
+    def max_ones_allowed(board_size):
+        if board_size <= 10:
+            return 2
+        if board_size <= 20:
+            return 4
+        if board_size <= 30:
+            return 6
+        return 8
 
-        for style_name in styles:
+    # Start with one of each size (1..max_tile)
+    base = {s: 1 for s in range(1, max_tile + 1)}
+    used_area = sum(s * s for s in range(1, max_tile + 1))
+    remaining = board_size * board_size - used_area
 
-            inventory = tile_rectangle(
-                board_size,
-                board_size,
-                max_tile,
-                style_name,
-                root_size
-            )
+    # Bounded fill: try to fill remaining area using sizes from large->small
+    # while ensuring total 1x1 count does not exceed allowed limit.
+    allowed_ones = max_ones_allowed(board_size)
+    # we already have one 1x1 in base
+    remaining_ones_allowed = max(0, allowed_ones - base.get(1, 0))
 
-            inventory = normalize_inventory(inventory)
+    sizes_desc = list(range(max_tile, 0, -1))
 
-            if not inventory:
+    # recursive bounded fill that prefers larger tiles (tries larger counts first)
+    from functools import lru_cache
+
+    @lru_cache(maxsize=None)
+    def try_fill(idx, rem, ones_left):
+        if rem == 0:
+            return ()
+        if idx >= len(sizes_desc):
+            return None
+        s = sizes_desc[idx]
+        area = s * s
+        if s == 1:
+            max_cnt = min(ones_left, rem)
+        else:
+            max_cnt = rem // area
+
+        for cnt in range(max_cnt, -1, -1):
+            next_rem = rem - cnt * area
+            next_ones = ones_left - cnt if s == 1 else ones_left
+            if next_ones < 0:
                 continue
+            res = try_fill(idx + 1, next_rem, next_ones)
+            if res is not None:
+                return (cnt,) + res
+        return None
 
-            if inventory_total_area(inventory) != board_size * board_size:
-                continue
+    extra_counts = try_fill(0, remaining, remaining_ones_allowed)
 
-            stats = compute_stats_from_inventory(board_size, inventory)
+    if extra_counts is None:
+        # As a conservative fallback, fill greedily but cap ones to allowed_ones
+        extra = {}
+        rem = remaining
+        for s in sizes_desc:
+            if s == 1:
+                cnt = min(remaining_ones_allowed, rem)
+            else:
+                cnt = rem // (s * s)
+            extra[s] = cnt
+            rem -= cnt * s * s
 
-            if not inventory_is_structurally_rich(board_size, inventory, stats):
-                continue
+        # If still leftover, reduce larger tiles to try to fit exact area by replacing
+        # with smaller tiles; simplest fallback: allow ones to fill any leftover (may exceed cap)
+        if rem > 0:
+            extra[1] = extra.get(1, 0) + rem
 
-            candidates.append(
-                {
-                    "board_size": board_size,
-                    "inventory": inventory,
-                    "total_area": board_size * board_size,
-                    "tile_count": inventory_tile_count(inventory),
-                    "root_size": root_size,
-                    "style": style_name,
-                    "stats": stats,
-                }
-            )
+        for s, cnt in extra.items():
+            base[s] = base.get(s, 0) + cnt
 
-    if not candidates:
-        # try a greedy composition first to avoid all-1 fallback
-        fallback = fill_area_greedy(board_size * board_size, max_tile)
-        fallback = merge_small_tiles(fallback, max_tile)
-        # ensure forced presence of sizes for fallback composition as well
-        fallback = enforce_min_sizes(fallback, max_tile, board_size * board_size)
-        fallback = normalize_inventory(fallback)
+        base = normalize_inventory(base)
         return {
             "board_size": board_size,
-            "inventory": fallback,
+            "inventory": base,
             "total_area": board_size * board_size,
-            "tile_count": board_size * board_size,
+            "tile_count": inventory_tile_count(base),
             "score": 0,
         }
 
-    scored_candidates = [
-        (
-            score_inventory_candidate(
-                candidate["board_size"],
-                get_max_tile(candidate["board_size"]),
-                candidate["inventory"],
-                candidate["root_size"]
-            ) + score_inventory_structure(candidate["stats"]),
-            candidate
-        )
-        for candidate in candidates
-    ]
+    # apply extra_counts to base
+    for s, add_cnt in zip(sizes_desc, extra_counts):
+        if add_cnt:
+            base[s] = base.get(s, 0) + add_cnt
 
-    scored_candidates.sort(
-        key=lambda item: (
-            item[0],
-            -item[1]["tile_count"],
-            -len(item[1]["inventory"])
-        ),
-        reverse=True
-    )
-
-    best_score, best_candidate = scored_candidates[0]
-
-    # enforce presence of sizes 1..k where feasible, while trying to keep small tiles minimal
-    best_inv = best_candidate["inventory"]
-    # first ensure each size is present
-    enforced = enforce_min_sizes(best_inv, max_tile, board_size * board_size)
-    # aggressively merge remaining small tiles (may remove some forced singles)
-    enforced = merge_small_tiles(enforced, max_tile)
-    # re-enforce presence in case merging removed forced tiles
-    enforced = enforce_min_sizes(enforced, max_tile, board_size * board_size)
-    enforced = normalize_inventory(enforced)
-
-    stats2 = compute_stats_from_inventory(board_size, enforced)
-    final_score = (
-        score_inventory_candidate(board_size, max_tile, enforced, best_candidate["root_size"]) +
-        score_inventory_structure(stats2)
-    )
-
-    # keep enforced inventory even if it fails the richness check
-    # (user requested all sizes 1..max_tile must be present)
-    final_score = (
-        score_inventory_candidate(board_size, max_tile, enforced, best_candidate["root_size"]) +
-        score_inventory_structure(stats2)
-    )
-
+    base = normalize_inventory(base)
     return {
         "board_size": board_size,
-        "inventory": enforced,
+        "inventory": base,
         "total_area": board_size * board_size,
-        "tile_count": inventory_tile_count(enforced),
-        "score": final_score,
+        "tile_count": inventory_tile_count(base),
+        "score": 0,
     }
 
 
