@@ -11,7 +11,6 @@ class PracticeLevel:
     deadzone_limit: int
     description: str
     score: int
-    mode_key: str = "ENDLESS"
 
 
 def is_prime(number):
@@ -41,10 +40,10 @@ def get_max_tile(board_size):
 
 def get_deadzone_limit(level_number):
 
-    if level_number <= 10:
+    if level_number < 9:
         return 2
 
-    if level_number <= 20:
+    if level_number <= 18:
         return 3
 
     return 4
@@ -759,8 +758,7 @@ def build_learning_levels():
                     f"{board_size}x{board_size} practice board. "
                     f"Inventory: {summary}"
                 ),
-                score=inventory_info["score"],
-                mode_key="ENDLESS"
+                score=inventory_info["score"]
             )
         )
 

@@ -423,7 +423,7 @@ def build_level_buttons():
                 button_width,
                 button_height,
                 callback=lambda selected_level=level: start_game(
-                    GAME_MODES[selected_level.mode_key],
+                    GAME_MODES["STANDARD"],
                     selected_level
                 ),
                 font_size=22,
@@ -719,7 +719,7 @@ def go_to_next_level():
     next_level = get_next_learning_level(state.current_level)
 
     if next_level:
-        start_game(GAME_MODES[next_level.mode_key], next_level)
+        start_game(GAME_MODES["STANDARD"], next_level)
     else:
         return_to_level_menu()
 

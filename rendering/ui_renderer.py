@@ -29,10 +29,19 @@ class UIRenderer:
             18
         )
 
+    def get_deadzone_limit(self, state):
+
+        current_level = getattr(state, "current_level", None)
+
+        if current_level is not None:
+            return current_level.deadzone_limit
+
+        return getattr(state.game_mode, "deadzone_limit", None)
+
     def get_status_text(self, state):
 
         deadzone_count = getattr(state, "deadzone_count", len(state.dead_regions))
-        limit = getattr(state.game_mode, "deadzone_limit", None)
+        limit = self.get_deadzone_limit(state)
 
         if limit is not None and deadzone_count >= limit:
 
@@ -250,13 +259,20 @@ class UIRenderer:
         )
         screen.blit(status, (section_x + 10, 190))
 
-        mode_name = getattr(state.game_mode, "name", "STANDARD")
-        mode_value = f"{mode_name} MODE"
+        current_level = getattr(state, "current_level", None)
+
+        if current_level is not None:
+            rule_label = "Level Rule"
+            rule_value = f"Allowance {current_level.deadzone_limit}"
+        else:
+            mode_name = getattr(state.game_mode, "name", "STANDARD")
+            rule_label = "Game Mode"
+            rule_value = f"{mode_name} MODE"
 
         self.draw_label_value(
             screen,
-            "Game Mode",
-            mode_value,
+            rule_label,
+            rule_value,
             self.small_font,
             self.text_font,
             section_x + 10,
@@ -266,7 +282,7 @@ class UIRenderer:
         )
 
         deadzone_count = getattr(state, "deadzone_count", len(state.dead_regions))
-        limit = getattr(state.game_mode, "deadzone_limit", None)
+        limit = self.get_deadzone_limit(state)
         if limit is None:
             deadzone_value = f"Dead Zones: {deadzone_count}"
         else:
