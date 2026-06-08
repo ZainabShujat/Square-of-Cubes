@@ -1,4 +1,4 @@
-from generate_approve_inventories import find_best_for_level
+from inventory_math.generate_approve_inventories import find_best_for_level
 from core.levels import LEARNING_LEVELS
 
 # quick run for levels 2-4

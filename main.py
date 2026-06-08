@@ -12,6 +12,7 @@ from core.analysis import AnalysisEngine
 from core.advisor import Advisor
 from core.game_modes import GAME_MODES
 from core.levels import LEARNING_LEVELS, get_next_learning_level
+from core.player_store import PlayerStore
 
 from core.history import HistoryManager
 
@@ -87,6 +88,8 @@ screen_manager = ScreenManager()
 
 history = HistoryManager()
 
+player_store = PlayerStore()
+
 
 # =====================================================
 # HELPERS
@@ -119,6 +122,28 @@ def open_level_menu():
 def open_level_result():
 
     screen_manager.set_screen(ScreenManager.LEVEL_RESULT)
+
+
+def active_player():
+
+    return player_store.active_player()
+
+
+def open_profile_select():
+
+    screen_manager.set_screen(ScreenManager.PROFILE_SELECT)
+
+
+def switch_player(player_id):
+
+    player_store.set_active_player(player_id)
+    screen_manager.set_screen(ScreenManager.MENU)
+
+
+def create_local_player():
+
+    player_store.create_player()
+    screen_manager.set_screen(ScreenManager.MENU)
 
 
 def clear_end_dialog_state():
@@ -292,6 +317,12 @@ level_result_menu_button = None
 
 level_result_buttons = []
 
+profile_buttons = []
+
+profile_back_button = None
+
+profile_new_button = None
+
 # =====================================================
 # BUILD MENU BUTTONS
 # =====================================================
@@ -305,8 +336,8 @@ def build_menu_buttons():
         - BUTTON_WIDTH // 2
     )
 
-    start_y = 216
-    gap = 74
+    start_y = 180
+    gap = 66
 
     menu_buttons = [
 
@@ -357,9 +388,18 @@ def build_menu_buttons():
         ),
 
         Button(
-            "EXIT",
+            "PLAYER",
             center_x,
             start_y + gap * 4,
+            BUTTON_WIDTH,
+            BUTTON_HEIGHT,
+            callback=open_profile_select
+        ),
+
+        Button(
+            "EXIT",
+            center_x,
+            start_y + gap * 5,
             BUTTON_WIDTH,
             BUTTON_HEIGHT,
             callback=lambda: setattr(
@@ -423,7 +463,7 @@ def build_level_buttons():
                 button_width,
                 button_height,
                 callback=lambda selected_level=level: start_game(
-                    GAME_MODES["STANDARD"],
+                    None,
                     selected_level
                 ),
                 font_size=22,
@@ -470,6 +510,64 @@ def build_level_buttons():
         callback=lambda: shift_page(1),
         font_size=22,
         hover_scale=1.04
+    )
+
+
+def build_profile_buttons():
+
+    global profile_buttons
+    global profile_back_button
+    global profile_new_button
+
+    profile_buttons = []
+
+    center_x = screen.get_width() // 2
+    start_y = 180
+    button_width = 300
+    button_height = 58
+    gap = 70
+
+    for index, player in enumerate(player_store.players()[:6]):
+
+        stats = player.get("stats", {})
+        label = (
+            f"{player.get('name', 'Player')}  "
+            f"L{stats.get('best_level', 0)}  "
+            f"{stats.get('total_stars', 0)} stars"
+        )
+
+        profile_buttons.append(
+            Button(
+                label,
+                center_x - button_width // 2,
+                start_y + index * gap,
+                button_width,
+                button_height,
+                callback=lambda player_id=player["id"]: switch_player(player_id),
+                font_size=18,
+                hover_scale=1.03
+            )
+        )
+
+    profile_new_button = Button(
+        "NEW PLAYER",
+        center_x - button_width // 2,
+        screen.get_height() - 170,
+        button_width,
+        54,
+        callback=create_local_player,
+        font_size=20
+    )
+
+    profile_back_button = Button(
+        "BACK",
+        80,
+        screen.get_height() - 100,
+        140,
+        50,
+        callback=lambda: screen_manager.set_screen(
+            ScreenManager.MENU
+        )
     )
 
 
@@ -570,9 +668,97 @@ def draw_menu(screen):
 
     screen.blit(title, title_rect)
 
+    player = active_player()
+
+    if player:
+
+        stats = player.get("stats", {})
+        profile_text = about_small_font.render(
+            (
+                f"Player: {player.get('name', 'Player')}  "
+                f"Best level {stats.get('best_level', 0)}  "
+                f"{stats.get('total_stars', 0)} stars"
+            ),
+            True,
+            (170, 190, 235)
+        )
+
+        profile_rect = profile_text.get_rect(
+            center=(
+                screen.get_width() // 2,
+                176
+            )
+        )
+
+        screen.blit(profile_text, profile_rect)
+
     for button in menu_buttons:
 
         button.draw(screen)
+
+
+def draw_profile_select_screen(screen):
+
+    screen.fill(BACKGROUND_COLOR)
+
+    title = ui_renderer.title_font.render(
+        "PLAYERS",
+        True,
+        TEXT_COLOR
+    )
+
+    title_rect = title.get_rect(
+        center=(
+            screen.get_width() // 2,
+            80
+        )
+    )
+
+    screen.blit(title, title_rect)
+
+    subtitle = about_small_font.render(
+        "Choose a local player profile for progress and game history.",
+        True,
+        (160, 170, 205)
+    )
+
+    subtitle_rect = subtitle.get_rect(
+        center=(
+            screen.get_width() // 2,
+            120
+        )
+    )
+
+    screen.blit(subtitle, subtitle_rect)
+
+    active_id = player_store.data.get("active_player_id")
+
+    for button in profile_buttons:
+
+        button.draw(screen)
+
+    for index, player in enumerate(player_store.players()[:6]):
+
+        if player.get("id") != active_id:
+            continue
+
+        marker = about_small_font.render(
+            "ACTIVE",
+            True,
+            (120, 255, 150)
+        )
+
+        screen.blit(
+            marker,
+            (
+                screen.get_width() // 2 + 170,
+                198 + index * 70
+            )
+        )
+
+    profile_new_button.draw(screen)
+    profile_back_button.draw(screen)
+
 
 def build_about_button():
 
@@ -719,7 +905,7 @@ def go_to_next_level():
     next_level = get_next_learning_level(state.current_level)
 
     if next_level:
-        start_game(GAME_MODES["STANDARD"], next_level)
+        start_game(None, next_level)
     else:
         return_to_level_menu()
 
@@ -741,6 +927,7 @@ def level_stars_for_result(won, deadzone_count, gap_count, deadzone_limit):
 def finalize_level_run(outcome):
 
     state.level_result = build_level_result_data(outcome)
+    player_store.record_level_result(state.level_result)
 
     if outcome == "win" and not state.win_sound_played:
 
@@ -886,8 +1073,8 @@ def build_level_result_buttons():
     result = state.level_result or {}
     outcome = result.get("outcome")
     next_level = get_next_learning_level(state.current_level) if state.current_level else None
-    panel_y = screen.get_height() // 2 - 190
-    panel_height = 390
+    panel_y = screen.get_height() // 2 - 220
+    panel_height = 440
     button_y = panel_y + panel_height - 72
     button_width = 150
     button_height = 60
@@ -977,6 +1164,124 @@ def build_level_result_buttons():
         ]
 
 
+def draw_result_tile_pattern(screen, panel, is_win):
+
+    pattern = [
+        (1, panel.x + 34, panel.y + 42),
+        (2, panel.x + 56, panel.y + 72),
+        (3, panel.x + 92, panel.y + 38),
+        (2, panel.right - 114, panel.y + 54),
+        (1, panel.right - 52, panel.y + 96),
+        (3, panel.right - 102, panel.bottom - 160),
+        (2, panel.x + 54, panel.bottom - 152),
+    ]
+
+    alpha = 92 if is_win else 58
+
+    for size, x, y in pattern:
+
+        color = get_tile_color(size + (2 if is_win else 0))
+        tile_size = size * 16
+        tile_surface = pygame.Surface(
+            (tile_size, tile_size),
+            pygame.SRCALPHA
+        )
+
+        pygame.draw.rect(
+            tile_surface,
+            (*color, alpha),
+            tile_surface.get_rect(),
+            border_radius=6
+        )
+
+        pygame.draw.rect(
+            tile_surface,
+            (*color, min(180, alpha + 56)),
+            tile_surface.get_rect(),
+            width=2,
+            border_radius=6
+        )
+
+        screen.blit(tile_surface, (x, y))
+
+
+def draw_result_star_marks(screen, panel, stars, max_stars):
+
+    mark_width = 42
+    gap = 12
+    total_width = max_stars * mark_width + (max_stars - 1) * gap
+    start_x = panel.centerx - total_width // 2
+    y = panel.y + 116
+
+    for index in range(max_stars):
+
+        filled = index < stars
+        rect = pygame.Rect(
+            start_x + index * (mark_width + gap),
+            y,
+            mark_width,
+            14
+        )
+
+        color = (255, 220, 120) if filled else (70, 76, 112)
+        border = (255, 240, 170) if filled else (105, 112, 156)
+
+        pygame.draw.rect(
+            screen,
+            color,
+            rect,
+            border_radius=7
+        )
+
+        pygame.draw.rect(
+            screen,
+            border,
+            rect,
+            width=2,
+            border_radius=7
+        )
+
+
+def draw_result_metric_card(screen, rect, label, value, accent):
+
+    pygame.draw.rect(
+        screen,
+        (18, 24, 50),
+        rect,
+        border_radius=12
+    )
+
+    pygame.draw.rect(
+        screen,
+        accent,
+        rect,
+        width=2,
+        border_radius=12
+    )
+
+    label_surface = about_small_font.render(
+        label,
+        True,
+        (150, 164, 205)
+    )
+
+    value_surface = about_font.render(
+        value,
+        True,
+        TEXT_COLOR
+    )
+
+    screen.blit(
+        label_surface,
+        (rect.x + 14, rect.y + 10)
+    )
+
+    screen.blit(
+        value_surface,
+        (rect.x + 14, rect.y + 32)
+    )
+
+
 def draw_level_result_screen(screen):
     result = state.level_result or {}
     outcome = result.get("outcome", "lose")
@@ -990,52 +1295,109 @@ def draw_level_result_screen(screen):
         pygame.SRCALPHA
     )
 
-    overlay.fill((0, 0, 0, 190))
+    overlay.fill((0, 0, 0, 176))
     screen.blit(overlay, (0, 0))
 
     panel = pygame.Rect(
-        screen.get_width() // 2 - 300,
-        screen.get_height() // 2 - 190,
-        600,
-        390
+        screen.get_width() // 2 - 360,
+        screen.get_height() // 2 - 220,
+        720,
+        440
+    )
+
+    base_color = (12, 24, 44) if is_win else (36, 16, 28)
+    panel_color = (14, 20, 42)
+    accent = (110, 230, 255) if is_win else (255, 116, 126)
+    soft_accent = (120, 255, 170) if is_win else (255, 176, 120)
+
+    glow = pygame.Surface(
+        (
+            panel.width + 46,
+            panel.height + 46
+        ),
+        pygame.SRCALPHA
+    )
+
+    pygame.draw.rect(
+        glow,
+        (*accent, 46),
+        glow.get_rect(),
+        border_radius=28
+    )
+
+    screen.blit(
+        glow,
+        (
+            panel.x - 23,
+            panel.y - 23
+        )
     )
 
     pygame.draw.rect(
         screen,
-        (16, 18, 38),
+        base_color,
         panel,
-        border_radius=22
+        border_radius=24
     )
 
-    border_color = (120, 200, 255) if is_win else (255, 110, 110)
+    inner_panel = panel.inflate(-24, -24)
 
     pygame.draw.rect(
         screen,
-        border_color,
+        panel_color,
+        inner_panel,
+        border_radius=18
+    )
+
+    draw_result_tile_pattern(screen, inner_panel, is_win)
+
+    pygame.draw.rect(
+        screen,
+        accent,
         panel,
         width=2,
-        border_radius=22
+        border_radius=24
+    )
+
+    level_surface = about_small_font.render(
+        f"LEVEL {result.get('level_number', '?')}",
+        True,
+        soft_accent
+    )
+
+    screen.blit(
+        level_surface,
+        (
+            panel.centerx - level_surface.get_width() // 2,
+            panel.y + 34
+        )
     )
 
     title = menu_font.render(
-        "LEVEL COMPLETE" if is_win else "LEVEL FAILED",
+        "BOARD SEALED" if is_win else "TOPOLOGY BROKE",
         True,
-        TEXT_COLOR if is_win else (255, 200, 200)
+        TEXT_COLOR
     )
 
     screen.blit(
         title,
         (
             panel.centerx - title.get_width() // 2,
-            panel.y + 10
+            panel.y + 58
         )
     )
 
     stars = result.get("stars", 0)
     max_stars = result.get("max_stars", 3)
 
+    subtitle_text = (
+        "Clean fill, low fragmentation, progress saved."
+        if is_win
+        else "Dead zones exceeded the level allowance."
+    )
+
     star_text = about_font.render(
-        f"Stars: {'★' * stars}{'☆' * (max_stars - stars)}  ({stars}/{max_stars})",
+        subtitle_text,
         True,
         (255, 220, 120)
     )
@@ -1197,6 +1559,8 @@ while running:
 
     build_level_buttons()
 
+    build_profile_buttons()
+
     build_about_button()
 
     build_tutorial_buttons()
@@ -1280,6 +1644,28 @@ while running:
             for button in menu_buttons:
 
                 button.handle_event(event)
+
+        # -------------------------------------------------
+        # PROFILE SELECT SCREEN
+        # -------------------------------------------------
+
+        elif screen_manager.is_profile_select():
+
+            for button in profile_buttons:
+
+                button.handle_event(event)
+
+            profile_new_button.handle_event(event)
+
+            profile_back_button.handle_event(event)
+
+            if event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_ESCAPE:
+
+                    screen_manager.set_screen(
+                        ScreenManager.MENU
+                    )
 
         # -------------------------------------------------
         # ABOUT SCREEN
@@ -1673,6 +2059,10 @@ while running:
         screen.blit(overlay, (0, 0))
 
         draw_menu(screen)
+
+    elif screen_manager.is_profile_select():
+
+        draw_profile_select_screen(screen)
 
     elif screen_manager.is_about():
         screen.fill(BACKGROUND_COLOR)

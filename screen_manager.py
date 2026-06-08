@@ -7,6 +7,7 @@ class ScreenManager:
     GAME = "game"
     ABOUT = "about"
     TUTORIAL = "tutorial"
+    PROFILE_SELECT = "profile_select"
 
     def __init__(self):
 
@@ -43,3 +44,7 @@ class ScreenManager:
     def is_tutorial(self):
 
         return self.current_screen == self.TUTORIAL
+
+    def is_profile_select(self):
+
+        return self.current_screen == self.PROFILE_SELECT
