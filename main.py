@@ -23,6 +23,7 @@ from rendering.inventory_renderer import InventoryRenderer
 from rendering.ui_renderer import UIRenderer
 
 from screen_manager import ScreenManager
+from screens.about_screen import draw_about_screen
 
 from ui.button import Button
 from ui.text_block import TextBlock 
@@ -2065,84 +2066,13 @@ while running:
         draw_profile_select_screen(screen)
 
     elif screen_manager.is_about():
-        screen.fill(BACKGROUND_COLOR)
 
-        title = ui_renderer.title_font.render(
-            "ABOUT",
-            True,
-            TEXT_COLOR
-        )
-
-        screen.blit(
-            title,
-            (80, 60)
-        )
-
-        formula = about_font.render(
-            "1³ + 2³ + 3³ + ... + 9³ = 45² = 2025",
-            True,
-            (140, 180, 255)
-        )
-
-        screen.blit(
-            formula,
-            (80, 130)
-        )
-
-        block = TextBlock(
+        draw_about_screen(
+            screen,
+            ui_renderer,
             about_font,
-            (210, 210, 230),
-            900,
-            line_gap=10
+            about_back_button
         )
-
-        y = 210
-
-        paragraphs = [
-
-            (
-                "Sum of Cubes is a topology-based "
-                "spatial puzzle game built around "
-                "the mathematical identity above."
-            ),
-
-            (
-                "The total area of all square tiles "
-                "perfectly fills a 45×45 board."
-            ),
-
-            (
-                "The challenge is not merely filling "
-                "space, but preserving long-term "
-                "solvability and avoiding fragmented "
-                "regions."
-            ),
-
-            (
-                "Placed tiles remain movable, allowing "
-                "the board topology to evolve dynamically "
-                "throughout play."
-            ),
-
-            (
-                "This project explores geometry, "
-                "fragmentation, recoverability, and "
-                "spatial reasoning."
-            )
-        ]
-
-        for paragraph in paragraphs:
-
-            y = block.draw(
-                screen,
-                paragraph,
-                80,
-                y
-            )
-
-            y += 26
-
-        about_back_button.draw(screen)
 
     elif screen_manager.is_tutorial():
 
