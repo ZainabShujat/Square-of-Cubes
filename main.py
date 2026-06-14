@@ -1553,18 +1553,22 @@ while running:
 
         elif event.type == pygame.VIDEORESIZE:
 
-            MIN_WIDTH = 1200
-            MIN_HEIGHT = 800
+            new_width = max(WINDOW_WIDTH, min(event.w, MAX_WINDOW_WIDTH))
+            new_height = max(WINDOW_HEIGHT, min(event.h, MAX_WINDOW_HEIGHT))
 
-            new_width = max(
-                MIN_WIDTH,
-                event.w
-            )
+            if (new_width, new_height) != (event.w, event.h):
 
-            new_height = max(
-                MIN_HEIGHT,
-                event.h
-            )
+                screen = pygame.display.set_mode(
+                    (new_width, new_height),
+                    pygame.RESIZABLE
+                )
+
+            else:
+
+                screen = pygame.display.set_mode(
+                    (event.w, event.h),
+                    pygame.RESIZABLE
+                )
 
         # -------------------------------------------------
         # CONFIRM DIALOG
